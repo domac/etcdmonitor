@@ -1,0 +1,43 @@
+# etcdmonitor 配置文件
+etcd:
+  # etcd 端点地址
+  endpoint: "http://127.0.0.1:2379"
+  # 认证用户名
+  username: "root"
+  # 认证密码 - ⚠️ CHANGE THIS BEFORE DEPLOYMENT
+  password: "changeme"
+  # metrics 路径
+  metrics_path: "/metrics"
+  # 成员发现方式：true = 通过 etcd v3 HTTP API（需开启 gRPC-gateway + auth）
+  #              false = 通过 etcdctl 命令（不依赖 gRPC-gateway）
+  auth_enable: false
+  # etcdctl 所在目录（auth_enable: false 时使用）
+  bin_path: "/data/services/etcd/bin"
+
+server:
+  # 监控面板监听地址
+  listen: ":9090"
+  # 是否开启 HTTPS（需要先生成证书：./gen-certs.sh）
+  tls_enable: false
+  # TLS 证书文件路径（相对于程序所在目录）
+  tls_cert: "certs/server.crt"
+  # TLS 私钥文件路径（相对于程序所在目录）
+  tls_key: "certs/server.key"
+
+collector:
+  # 采集间隔（秒）
+  interval: 30
+
+storage:
+  # 数据文件路径（相对于程序所在目录）
+  db_path: "data/etcdmonitor.db"
+  # 数据保留天数
+  retention_days: 7
+
+log:
+  # 日志目录（相对于程序所在目录）
+  dir: "logs"
+  # 单个日志文件最大大小（MB）
+  max_size_mb: 50
+  # 保留日志文件个数
+  max_files: 5

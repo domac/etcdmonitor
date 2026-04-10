@@ -1,0 +1,34 @@
+# Go build artifacts
+*.o
+*.a
+*.so
+.so
+*.test
+*.out
+*.exe
+go.mod.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+*.sublime-*
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+.env.local
+
+# Project specific
+dist/
+data/
+logs/
+#certs/*.key
+#certs/*.crt
+etcdmonitor
+etcdmonitor-linux-amd64
+*.db
+*.log

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>etcd Monitor Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Connecting to etcd monitor...</div>
+</div>
+
+<!-- Header -->
+<header class="header">
+    <div class="header-left">
+        <div class="header-logo">E</div>
+        <div>
+            <div class="header-title">etcd Monitor</div>
+            <select class="member-select" id="memberSelect" onchange="onMemberChange()">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="status-badge" id="statusBadge">
+            <div class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <select class="time-range-select" id="timeRange" onchange="onTimeRangeChange()">
+            <option value="1m">Last 1m</option>
+            <option value="5m">Last 5m</option>
+            <option value="10m">Last 10m</option>
+            <option value="30m">Last 30m</option>
+            <option value="1h" selected>Last 1h</option>
+            <option value="3h">Last 3h</option>
+            <option value="6h">Last 6h</option>
+            <option value="12h">Last 12h</option>
+            <option value="24h">Last 24h</option>
+            <option value="7d">Last 7d</option>
+        </select>
+        <select class="time-range-select" id="refreshInterval" onchange="onRefreshIntervalChange()">
+            <option value="60000" selected>Refresh: 1m</option>
+            <option value="180000">Refresh: 3m</option>
+            <option value="300000">Refresh: 5m</option>
+            <option value="0">Manual</option>
+        </select>
+        <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="Refresh now">&#8635;</button>
+        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">&#9790;</button>
+        <div class="last-update" id="lastUpdate">-</div>
+    </div>
+</header>
+
+<!-- Main Content -->
+<main class="main">
+    <!-- Key Metrics Banner -->
+    <div class="key-metrics-banner">
+        <div class="key-metric">
+            <div class="key-metric-icon cpu">C</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">CPU Usage</div>
+                <div class="key-metric-value" id="bannerCPU">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
+        <div class="key-metric">
+            <div class="key-metric-icon mem">M</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">Memory</div>
+                <div class="key-metric-value" id="bannerMemory">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
+        <div class="key-metric">
+            <div class="key-metric-icon db">D</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">DB Size</div>
+                <div class="key-metric-value" id="bannerDBSize">-</div>
+                <div class="key-metric-sub" id="bannerDBInUse">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
+        <div class="key-metric">
+            <div class="key-metric-icon keys">K</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">KV Total</div>
+                <div class="key-metric-value" id="bannerKeys">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
+        <div class="key-metric">
+            <div class="key-metric-icon commit">B</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">Backend Commit P99</div>
+                <div class="key-metric-value" id="bannerCommitP99">-</div>
+                <div class="key-metric-sub">target &lt; 25ms</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overview Cards -->
+    <div class="overview-grid">
+        <div class="stat-card">
+            <div class="label">Leader Status</div>
+            <div class="value green" id="cardLeader">-</div>
+            <div class="sub" id="cardLeaderSub">-</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Leader Changes</div>
+            <div class="value orange" id="cardLeaderChanges">-</div>
+            <div class="sub">total elections</div>
+        </div>
+        <div class="stat-card member-card" id="memberCard">
+            <div class="label">Members</div>
+            <div class="value cyan" id="cardMemberSize">-</div>
+            <div class="sub">cluster size</div>
+            <div class="member-tooltip" id="memberTooltip"></div>
+        </div>
+        <div class="stat-card">
+            <div class="label">WAL Fsync P99</div>
+            <div class="value orange" id="cardWAL">-</div>
+            <div class="sub">target &lt; 10ms</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Proposals Pending</div>
+            <div class="value purple" id="cardPending">-</div>
+            <div class="sub">raft proposals</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Commit-Apply Lag</div>
+            <div class="value cyan" id="cardLag">-</div>
+            <div class="sub">committed - applied</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Proposal Failed Rate</div>
+            <div class="value red" id="cardFailedRate">-</div>
+            <div class="sub">per second</div>
+        </div>
+    </div>
+
+    <!-- Raft / Server Section -->
+    <div class="section-header">
+        <div class="section-icon server">R</div>
+        <div class="section-title">Raft & Server</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Raft Proposals</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartRaftProposals"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Leader Changes & Slow Operations</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartLeaderChanges"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Proposal Commit-Apply Lag</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartProposalLag"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Proposal Failed Rate</span>
+                <span class="panel-tag">Rate</span>
+            </div>
+            <div class="panel-body" id="chartProposalFailedRate"></div>
+        </div>
+    </div>
+
+    <!-- Disk Performance Section -->
+    <div class="section-header">
+        <div class="section-icon disk">D</div>
+        <div class="section-title">Disk Performance</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">WAL Fsync Duration</span>
+                <span class="panel-tag">Histogram</span>
+            </div>
+            <div class="panel-body" id="chartWALFsync"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Backend Commit Duration</span>
+                <span class="panel-tag">Histogram</span>
+            </div>
+            <div class="panel-body" id="chartBackendCommit"></div>
+        </div>
+    </div>
+
+    <!-- MVCC / Storage Section -->
+    <div class="section-header">
+        <div class="section-icon storage">S</div>
+        <div class="section-title">MVCC & Storage</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Database Size</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartDBSize"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">MVCC Operations</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartMVCCOps"></div>
+        </div>
+    </div>
+
+    <!-- Network Section -->
+    <div class="section-header">
+        <div class="section-icon network">N</div>
+        <div class="section-title">Network & Peers</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Peer Network Traffic</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartPeerTraffic"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Peer Round Trip Time</span>
+                <span class="panel-tag">Histogram</span>
+            </div>
+            <div class="panel-body" id="chartPeerRTT"></div>
+        </div>
+    </div>
+
+    <!-- gRPC Section -->
+    <div class="section-header">
+        <div class="section-icon grpc">G</div>
+        <div class="section-title">gRPC Requests</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">gRPC Request Rate</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartGRPC"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">gRPC Client Traffic</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartGRPCTraffic"></div>
+        </div>
+    </div>
+
+    <!-- Process & Runtime Section -->
+    <div class="section-header">
+        <div class="section-icon runtime">P</div>
+        <div class="section-title">Process & Runtime</div>
+    </div>
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">CPU Usage</span>
+                <span class="panel-tag">Rate</span>
+            </div>
+            <div class="panel-body" id="chartCPU"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Memory</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartMemory"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Goroutines</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartGoroutines"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">GC Duration</span>
+                <span class="panel-tag">Summary</span>
+            </div>
+            <div class="panel-body" id="chartGC"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">File Descriptors</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartFDs"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Memory Sys</span>
+                <span class="panel-tag">Gauge</span>
+            </div>
+            <div class="panel-body" id="chartMemSys"></div>
+        </div>
+    </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
