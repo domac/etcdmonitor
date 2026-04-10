@@ -2,11 +2,12 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"etcdmonitor/internal/logger"
 )
 
 func (a *API) handleMembers(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +24,7 @@ func (a *API) handleMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[API] Encode error: %v", err)
+		logger.Errorf("[API] Encode error: %v", err)
 	}
 }
 
@@ -41,7 +42,7 @@ func (a *API) handleCurrent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[API] Encode error: %v", err)
+		logger.Errorf("[API] Encode error: %v", err)
 	}
 }
 
@@ -122,7 +123,7 @@ func (a *API) handleRange(w http.ResponseWriter, r *http.Request) {
 
 	data, err := a.store.QueryRange(memberID, metricNames, start, end)
 	if err != nil {
-		log.Printf("[API] QueryRange error: %v", err)
+		logger.Errorf("[API] QueryRange error: %v", err)
 		http.Error(w, `{"error":"query failed"}`, http.StatusInternalServerError)
 		return
 	}
@@ -135,7 +136,7 @@ func (a *API) handleRange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[API] Encode error: %v", err)
+		logger.Errorf("[API] Encode error: %v", err)
 	}
 }
 
@@ -165,7 +166,7 @@ func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[API] Encode error: %v", err)
+		logger.Errorf("[API] Encode error: %v", err)
 	}
 }
 
@@ -210,7 +211,7 @@ func (a *API) handleDebug(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[API] Encode error: %v", err)
+		logger.Errorf("[API] Encode error: %v", err)
 	}
 }
 

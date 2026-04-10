@@ -37,7 +37,17 @@ storage:
 log:
   # 日志目录（相对于程序所在目录）
   dir: "logs"
-  # 单个日志文件最大大小（MB）
+  # 日志文件名
+  filename: "etcdmonitor.log"
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  # 单个日志文件最大大小（MB），超过自动切割
   max_size_mb: 50
   # 保留日志文件个数
   max_files: 5
+  # 旧日志保留天数（0 表示不按天数清理，仅按文件数控制）
+  max_age: 30
+  # 是否压缩归档旧日志（gzip）
+  compress: false
+  # 是否同时输出到控制台
+  console: true

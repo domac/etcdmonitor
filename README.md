@@ -36,12 +36,9 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 ```bash
 # Upload to server
-scp etcdmonitor-v1.0.0-linux-amd64.zip root@<server>:/data/services/
 
-# On the server
-cd /data/services
-unzip etcdmonitor-v1.0.0-linux-amd64.zip
-cd etcdmonitor-v1.0.0-linux-amd64
+unzip etcdmonitor-v0.2.0-linux-amd64.zip
+cd etcdmonitor-v0.2.0-linux-amd64
 
 # Edit config
 vim config.yaml

@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/logger"
 )
 
 // maxResponseSize is the maximum allowed response body size (10 MB) to prevent OOM.
@@ -61,28 +61,28 @@ func (c *Collector) discoverMembersViaAPI() []MemberInfo {
 			"password": c.cfg.Etcd.Password,
 		})
 		if err != nil {
-			log.Printf("[Collector] Auth body marshal failed: %v", err)
+			logger.Errorf("[Collector] Auth body marshal failed: %v", err)
 			return nil
 		}
 
 		req, err := http.NewRequest("POST", authURL, bytes.NewReader(authBody))
 		if err != nil {
-			log.Printf("[Collector] Auth request create failed: %v", err)
+			logger.Errorf("[Collector] Auth request create failed: %v", err)
 			return nil
 		}
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := c.client.Do(req)
 		if err != nil {
-			log.Printf("[Collector] Auth request failed: %v", err)
+			logger.Errorf("[Collector] Auth request failed: %v", err)
 			return nil
 		}
 		defer resp.Body.Close()
 
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("[Collector] Auth failed (%d): %s", resp.StatusCode, string(bodyBytes[:min(len(bodyBytes), 500)]))
-			log.Printf("[Collector] Hint: if etcd gRPC-gateway is not enabled, set auth_enable: false in config.yaml")
+			logger.Errorf("[Collector] Auth failed (%d): %s", resp.StatusCode, string(bodyBytes[:min(len(bodyBytes), 500)]))
+			logger.Warnf("[Collector] Hint: if etcd gRPC-gateway is not enabled, set auth_enable: false in config.yaml")
 			return nil
 		}
 
@@ -90,18 +90,18 @@ func (c *Collector) discoverMembersViaAPI() []MemberInfo {
 			Token string `json:"token"`
 		}
 		if err := json.Unmarshal(bodyBytes, &authResp); err != nil || authResp.Token == "" {
-			log.Printf("[Collector] Auth token parse failed: %v, body: %s", err, string(bodyBytes[:min(len(bodyBytes), 500)]))
+			logger.Errorf("[Collector] Auth token parse failed: %v, body: %s", err, string(bodyBytes[:min(len(bodyBytes), 500)]))
 			return nil
 		}
 		token = authResp.Token
-		log.Printf("[Collector] Auth succeeded, token length: %d", len(token))
+		logger.Infof("[Collector] Auth succeeded, token length: %d", len(token))
 	}
 
 	// Step 2: 获取成员列表
 	memberListURL := endpoint + "/v3/cluster/member/list"
 	req, err := http.NewRequest("POST", memberListURL, bytes.NewReader([]byte(`{}`)))
 	if err != nil {
-		log.Printf("[Collector] Member list request create failed: %v", err)
+		logger.Errorf("[Collector] Member list request create failed: %v", err)
 		return nil
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -111,15 +111,15 @@ func (c *Collector) discoverMembersViaAPI() []MemberInfo {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Printf("[Collector] Member list request failed: %v", err)
+		logger.Errorf("[Collector] Member list request failed: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[Collector] Member list returned %d: %s", resp.StatusCode, string(bodyBytes[:min(len(bodyBytes), 500)]))
-		log.Printf("[Collector] Hint: if etcd gRPC-gateway is not enabled, set auth_enable: false in config.yaml")
+		logger.Errorf("[Collector] Member list returned %d: %s", resp.StatusCode, string(bodyBytes[:min(len(bodyBytes), 500)]))
+		logger.Errorf("[Collector] Hint: if etcd gRPC-gateway is not enabled, set auth_enable: false in config.yaml")
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func (c *Collector) validateCredentials() bool {
 	dangerous := []string{"$", "`", ";", "|", "&", "<", ">", "(", ")", "\n", "\r"}
 	for _, char := range dangerous {
 		if strings.Contains(c.cfg.Etcd.Username, char) || strings.Contains(c.cfg.Etcd.Password, char) {
-			log.Printf("[Collector] Credentials contain dangerous character: %s", char)
+			logger.Warnf("[Collector] Credentials contain dangerous character: %s", char)
 			return false
 		}
 	}
@@ -151,7 +151,7 @@ func (c *Collector) discoverMembersViaCtl() []MemberInfo {
 
 	if c.cfg.Etcd.Username != "" && c.cfg.Etcd.Password != "" {
 		if !c.validateCredentials() {
-			log.Printf("[Collector] Skipping etcdctl due to invalid credentials")
+			logger.Warnf("[Collector] Skipping etcdctl due to invalid credentials")
 			return nil
 		}
 		args = append(args, "--user="+c.cfg.Etcd.Username+":"+c.cfg.Etcd.Password)
@@ -165,18 +165,18 @@ func (c *Collector) discoverMembersViaCtl() []MemberInfo {
 			safeArgs[i] = "--user=***:***"
 		}
 	}
-	log.Printf("[Collector] Running: %s %s", etcdctlPath, strings.Join(safeArgs, " "))
+	logger.Infof("[Collector] Running: %s %s", etcdctlPath, strings.Join(safeArgs, " "))
 
 	cmd := exec.Command(etcdctlPath, args...)
 	cmd.Env = append(cmd.Environ(), "ETCDCTL_API=3")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("[Collector] etcdctl failed: %v, output: %s", err, string(output[:min(len(output), 500)]))
+		logger.Errorf("[Collector] etcdctl failed: %v, output: %s", err, string(output[:min(len(output), 500)]))
 		return nil
 	}
 
-	log.Printf("[Collector] etcdctl output (%d bytes): %s", len(output), string(output[:min(len(output), 1000)]))
+	logger.Debugf("[Collector] etcdctl output (%d bytes): %s", len(output), string(output[:min(len(output), 1000)]))
 
 	return c.parseMemberListJSON(output)
 }
@@ -185,12 +185,12 @@ func (c *Collector) discoverMembersViaCtl() []MemberInfo {
 func (c *Collector) parseMemberListJSON(data []byte) []MemberInfo {
 	var mlResp etcdMemberListJSON
 	if err := json.Unmarshal(data, &mlResp); err != nil {
-		log.Printf("[Collector] Error decoding member list JSON: %v", err)
+		logger.Errorf("[Collector] Error decoding member list JSON: %v", err)
 		return nil
 	}
 
 	if len(mlResp.Members) == 0 {
-		log.Printf("[Collector] Member list is empty")
+		logger.Warnf("[Collector] Member list is empty")
 		return nil
 	}
 
@@ -202,7 +202,7 @@ func (c *Collector) parseMemberListJSON(data []byte) []MemberInfo {
 	if isLocalConfig {
 		localMemberID = c.getLocalMemberID()
 		if localMemberID != "" {
-			log.Printf("[Collector] Local member ID resolved: %s", localMemberID)
+			logger.Infof("[Collector] Local member ID resolved: %s", localMemberID)
 		}
 	}
 
@@ -247,7 +247,7 @@ func (c *Collector) parseMemberListJSON(data []byte) []MemberInfo {
 		})
 	}
 
-	log.Printf("[Collector] Discovered %d members", len(members))
+	logger.Infof("[Collector] Discovered %d members", len(members))
 	return members
 }
 
@@ -302,14 +302,14 @@ func (c *Collector) getLocalMemberID() string {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("[Collector] etcdctl endpoint status failed: %v", err)
+		logger.Errorf("[Collector] etcdctl endpoint status failed: %v", err)
 		return ""
 	}
 
 	// etcdctl endpoint status -w json 返回数组
 	var statuses []etcdEndpointStatus
 	if err := json.Unmarshal(output, &statuses); err != nil {
-		log.Printf("[Collector] Error parsing endpoint status: %v, output: %s", err, string(output[:min(len(output), 500)]))
+		logger.Errorf("[Collector] Error parsing endpoint status: %v, output: %s", err, string(output[:min(len(output), 500)]))
 		return ""
 	}
 

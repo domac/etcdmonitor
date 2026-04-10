@@ -37,8 +37,13 @@ type Config struct {
 
 	Log struct {
 		Dir       string `yaml:"dir"`
+		Filename  string `yaml:"filename"`
+		Level     string `yaml:"level"`
 		MaxSizeMB int    `yaml:"max_size_mb"`
 		MaxFiles  int    `yaml:"max_files"`
+		MaxAge    int    `yaml:"max_age"`
+		Compress  bool   `yaml:"compress"`
+		Console   bool   `yaml:"console"`
 	} `yaml:"log"`
 }
 
@@ -89,11 +94,20 @@ func Load(path string) (*Config, error) {
 	if cfg.Log.Dir == "" {
 		cfg.Log.Dir = "logs"
 	}
+	if cfg.Log.Filename == "" {
+		cfg.Log.Filename = "etcdmonitor.log"
+	}
+	if cfg.Log.Level == "" {
+		cfg.Log.Level = "info"
+	}
 	if cfg.Log.MaxSizeMB <= 0 {
 		cfg.Log.MaxSizeMB = 50
 	}
 	if cfg.Log.MaxFiles <= 0 {
 		cfg.Log.MaxFiles = 5
+	}
+	if cfg.Log.MaxAge <= 0 {
+		cfg.Log.MaxAge = 30
 	}
 
 	return cfg, nil

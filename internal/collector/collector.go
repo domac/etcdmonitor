@@ -2,12 +2,12 @@ package collector
 
 import (
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/storage"
 )
 
@@ -46,7 +46,7 @@ func New(cfg *config.Config, store *storage.Storage) *Collector {
 // Start 启动定时采集
 func (c *Collector) Start() {
 	interval := time.Duration(c.cfg.Collector.Interval) * time.Second
-	log.Printf("[Collector] Starting, interval=%v, endpoint=%s", interval, c.cfg.Etcd.Endpoint)
+	logger.Infof("[Collector] Starting, interval=%v, endpoint=%s", interval, c.cfg.Etcd.Endpoint)
 
 	c.collect()
 
@@ -58,7 +58,7 @@ func (c *Collector) Start() {
 		case <-ticker.C:
 			c.collect()
 		case <-c.stop:
-			log.Println("[Collector] Stopped")
+			logger.Info("[Collector] Stopped")
 			return
 		}
 	}
@@ -135,12 +135,12 @@ func (c *Collector) collect() {
 			c.mu.RUnlock()
 
 			if hasExisting {
-				log.Printf("[Collector] Member discovery failed, keeping previous member list")
+				logger.Warnf("[Collector] Member discovery failed, keeping previous member list")
 				c.mu.Lock()
 				c.lastMemberSync = time.Now()
 				c.mu.Unlock()
 			} else {
-				log.Printf("[Collector] No members discovered on first run, falling back to config endpoint")
+				logger.Warnf("[Collector] No members discovered on first run, falling back to config endpoint")
 				c.mu.Lock()
 				c.members = []MemberInfo{{
 					ID:         "default",
@@ -151,11 +151,11 @@ func (c *Collector) collect() {
 				}}
 				c.lastMemberSync = time.Now()
 				c.mu.Unlock()
-				log.Printf("[Collector] Member sync completed: 1 member (fallback)")
+				logger.Infof("[Collector] Member sync completed: 1 member (fallback)")
 			}
 		} else {
 			for _, m := range members {
-				log.Printf("[Collector] Member: id=%s name=%s endpoint=%s isDefault=%v", m.ID, m.Name, m.Endpoint, m.IsDefault)
+				logger.Infof("[Collector] Member: id=%s name=%s endpoint=%s isDefault=%v", m.ID, m.Name, m.Endpoint, m.IsDefault)
 			}
 
 			c.mu.Lock()
@@ -163,7 +163,7 @@ func (c *Collector) collect() {
 			c.lastMemberSync = time.Now()
 			c.mu.Unlock()
 
-			log.Printf("[Collector] Member sync completed: %d members", len(members))
+			logger.Infof("[Collector] Member sync completed: %d members", len(members))
 		}
 	}
 
@@ -198,9 +198,9 @@ func (c *Collector) collect() {
 	// 阶段2：串行写入 SQLite（避免 SQLITE_BUSY）
 	for res := range results {
 		if err := c.store.Store(now, res.member.ID, res.snapshot); err != nil {
-			log.Printf("[Collector] [%s] Error storing metrics: %v", res.member.Name, err)
+			logger.Errorf("[Collector] [%s] Error storing metrics: %v", res.member.Name, err)
 		} else {
-			log.Printf("[Collector] [%s] Collected %d metrics", res.member.Name, len(res.snapshot))
+			logger.Infof("[Collector] [%s] Collected %d metrics", res.member.Name, len(res.snapshot))
 		}
 	}
 }
@@ -215,7 +215,7 @@ func (c *Collector) fetchMemberMetrics(member MemberInfo, now time.Time) map[str
 
 	req, err := http.NewRequest("GET", metricsURL, nil)
 	if err != nil {
-		log.Printf("[Collector] [%s] Error creating request: %v", member.Name, err)
+		logger.Errorf("[Collector] [%s] Error creating request: %v", member.Name, err)
 		return nil
 	}
 
@@ -225,7 +225,7 @@ func (c *Collector) fetchMemberMetrics(member MemberInfo, now time.Time) map[str
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Printf("[Collector] [%s] Error fetching metrics from %s: %v", member.Name, metricsURL, err)
+		logger.Errorf("[Collector] [%s] Error fetching metrics from %s: %v", member.Name, metricsURL, err)
 		c.mu.Lock()
 		if c.latest[member.ID] == nil {
 			c.latest[member.ID] = make(map[string]float64)
@@ -242,23 +242,23 @@ func (c *Collector) fetchMemberMetrics(member MemberInfo, now time.Time) map[str
 			resp.Body.Close()
 			req2, err := http.NewRequest("GET", metricsURL, nil)
 			if err != nil {
-				log.Printf("[Collector] [%s] Error creating unauthenticated request: %v", member.Name, err)
+				logger.Errorf("[Collector] [%s] Error creating unauthenticated request: %v", member.Name, err)
 				return nil
 			}
 			resp2, err := c.client.Do(req2)
 			if err != nil {
-				log.Printf("[Collector] [%s] Unauthenticated fallback failed: %v", member.Name, err)
+				logger.Warnf("[Collector] [%s] Unauthenticated fallback failed: %v", member.Name, err)
 				return nil
 			}
 			defer resp2.Body.Close()
 			if resp2.StatusCode == http.StatusOK {
-				log.Printf("[Collector] [%s] Metrics endpoint accessible without auth", member.Name)
+				logger.Infof("[Collector] [%s] Metrics endpoint accessible without auth", member.Name)
 				return c.parseMetrics(resp2.Body, member, now)
 			}
-			log.Printf("[Collector] [%s] Auth failed, unauthenticated fallback also returned %d", member.Name, resp2.StatusCode)
+			logger.Warnf("[Collector] [%s] Auth failed, unauthenticated fallback also returned %d", member.Name, resp2.StatusCode)
 			return nil
 		}
-		log.Printf("[Collector] [%s] Unexpected status code: %d", member.Name, resp.StatusCode)
+		logger.Warnf("[Collector] [%s] Unexpected status code: %d", member.Name, resp.StatusCode)
 		return nil
 	}
 

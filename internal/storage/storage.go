@@ -3,13 +3,13 @@ package storage
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/logger"
 
 	_ "modernc.org/sqlite"
 )
@@ -47,7 +47,7 @@ func New(cfg *config.Config) (*Storage, error) {
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
-			log.Printf("[Storage] Warning: %s failed: %v", p, err)
+			logger.Warnf("[Storage] Warning: %s failed: %v", p, err)
 		}
 	}
 
@@ -116,24 +116,24 @@ func (s *Storage) migrateSchema() {
 	}
 
 	if !hasMemberID {
-		log.Println("[Storage] Migrating schema: adding member_id column...")
+		logger.Info("[Storage] Migrating schema: adding member_id column...")
 		_, err := s.db.Exec("ALTER TABLE metrics ADD COLUMN member_id TEXT NOT NULL DEFAULT ''")
 		if err != nil {
-			log.Printf("[Storage] Migration warning: %v", err)
+			logger.Warnf("[Storage] Migration warning: %v", err)
 		} else {
 			if _, err := s.db.Exec("DROP INDEX IF EXISTS idx_metrics_ts"); err != nil {
-				log.Printf("[Storage] Drop index warning: %v", err)
+				logger.Warnf("[Storage] Drop index warning: %v", err)
 			}
 			if _, err := s.db.Exec("DROP INDEX IF EXISTS idx_metrics_name_ts"); err != nil {
-				log.Printf("[Storage] Drop index warning: %v", err)
+				logger.Warnf("[Storage] Drop index warning: %v", err)
 			}
 			if _, err := s.db.Exec("CREATE INDEX IF NOT EXISTS idx_metrics_member_ts ON metrics(member_id, timestamp)"); err != nil {
-				log.Printf("[Storage] Create index warning: %v", err)
+				logger.Warnf("[Storage] Create index warning: %v", err)
 			}
 			if _, err := s.db.Exec("CREATE INDEX IF NOT EXISTS idx_metrics_member_name_ts ON metrics(member_id, metric_name, timestamp)"); err != nil {
-				log.Printf("[Storage] Create index warning: %v", err)
+				logger.Warnf("[Storage] Create index warning: %v", err)
 			}
-			log.Println("[Storage] Migration complete")
+			logger.Info("[Storage] Migration complete")
 		}
 	}
 }
@@ -150,7 +150,7 @@ func (s *Storage) CheckEndpointChange() error {
 		if err != nil {
 			return fmt.Errorf("save endpoint: %w", err)
 		}
-		log.Printf("[Storage] First run, recording etcd endpoint: %s", currentEndpoint)
+		logger.Infof("[Storage] First run, recording etcd endpoint: %s", currentEndpoint)
 		return nil
 	}
 	if err != nil {
@@ -158,19 +158,19 @@ func (s *Storage) CheckEndpointChange() error {
 	}
 
 	if config.NormalizeEndpoint(lastEndpoint) == currentEndpoint {
-		log.Printf("[Storage] etcd endpoint unchanged: %s", currentEndpoint)
+		logger.Infof("[Storage] etcd endpoint unchanged: %s", currentEndpoint)
 		return nil
 	}
 
-	log.Printf("[Storage] *** etcd endpoint changed: %s -> %s ***", lastEndpoint, currentEndpoint)
-	log.Printf("[Storage] Cleaning all historical monitoring data to prevent data mixing...")
+	logger.Warnf("[Storage] *** etcd endpoint changed: %s -> %s ***", lastEndpoint, currentEndpoint)
+	logger.Infof("[Storage] Cleaning all historical monitoring data to prevent data mixing...")
 
 	result, err := s.db.Exec("DELETE FROM metrics")
 	if err != nil {
 		return fmt.Errorf("cleanup metrics: %w", err)
 	}
 	rows, _ := result.RowsAffected()
-	log.Printf("[Storage] Cleaned %d records", rows)
+	logger.Infof("[Storage] Cleaned %d records", rows)
 
 	_, _ = s.db.Exec("VACUUM") // best-effort reclaim after data cleanup
 
@@ -179,7 +179,7 @@ func (s *Storage) CheckEndpointChange() error {
 		return fmt.Errorf("update endpoint: %w", err)
 	}
 
-	log.Printf("[Storage] Endpoint updated, starting fresh data collection")
+	logger.Infof("[Storage] Endpoint updated, starting fresh data collection")
 	return nil
 }
 
@@ -356,21 +356,21 @@ func (s *Storage) cleanup() {
 
 	result, err := s.db.Exec("DELETE FROM metrics WHERE timestamp < ?", cutoff)
 	if err != nil {
-		log.Printf("[Storage] Cleanup error: %v", err)
+		logger.Errorf("[Storage] Cleanup error: %v", err)
 		return
 	}
 
 	if rows, _ := result.RowsAffected(); rows > 0 {
-		log.Printf("[Storage] Cleaned up %d expired records (older than %d days)", rows, retentionDays)
+		logger.Infof("[Storage] Cleaned up %d expired records (older than %d days)", rows, retentionDays)
 		// VACUUM 回收磁盘空间（大量删除后执行）
 		if rows > 10000 {
-			log.Printf("[Storage] Running VACUUM to reclaim disk space...")
+			logger.Infof("[Storage] Running VACUUM to reclaim disk space...")
 			if _, err := s.db.Exec("VACUUM"); err != nil {
-				log.Printf("[Storage] VACUUM warning: %v", err)
+				logger.Warnf("[Storage] VACUUM warning: %v", err)
 			}
 		} else {
 			if _, err := s.db.Exec("PRAGMA incremental_vacuum"); err != nil {
-				log.Printf("[Storage] Incremental vacuum warning: %v", err)
+				logger.Warnf("[Storage] Incremental vacuum warning: %v", err)
 			}
 		}
 	}
