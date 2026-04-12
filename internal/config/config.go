@@ -11,19 +11,21 @@ import (
 // Config 应用配置结构
 type Config struct {
 	Etcd struct {
-		Endpoint    string `yaml:"endpoint"`
-		Username    string `yaml:"username"`
-		Password    string `yaml:"password"`
-		MetricsPath string `yaml:"metrics_path"`
-		AuthEnable  *bool  `yaml:"auth_enable"`
-		BinPath     string `yaml:"bin_path"`
+		Endpoint        string `yaml:"endpoint"`
+		Username        string `yaml:"username"`
+		Password        string `yaml:"password"`
+		MetricsPath     string `yaml:"metrics_path"`
+		DiscoveryViaAPI *bool  `yaml:"discovery_via_api"`
+		AuthEnable      *bool  `yaml:"auth_enable"` // 已弃用，兼容旧配置
+		BinPath         string `yaml:"bin_path"`
 	} `yaml:"etcd"`
 
 	Server struct {
-		Listen    string `yaml:"listen"`
-		TLSEnable bool   `yaml:"tls_enable"`
-		TLSCert   string `yaml:"tls_cert"`
-		TLSKey    string `yaml:"tls_key"`
+		Listen         string `yaml:"listen"`
+		TLSEnable      bool   `yaml:"tls_enable"`
+		TLSCert        string `yaml:"tls_cert"`
+		TLSKey         string `yaml:"tls_key"`
+		SessionTimeout int    `yaml:"session_timeout"`
 	} `yaml:"server"`
 
 	Collector struct {
@@ -70,6 +72,17 @@ func Load(path string) (*Config, error) {
 		defaultTrue := true
 		cfg.Etcd.AuthEnable = &defaultTrue
 	}
+	// 兼容旧字段名：auth_enable → discovery_via_api
+	if cfg.Etcd.DiscoveryViaAPI == nil {
+		if cfg.Etcd.AuthEnable != nil {
+			// 使用旧字段值，输出弃用提示（日志系统可能尚未初始化，用 fmt）
+			cfg.Etcd.DiscoveryViaAPI = cfg.Etcd.AuthEnable
+			fmt.Println("[WARN] config: 'auth_enable' is deprecated, please use 'discovery_via_api' instead")
+		} else {
+			defaultTrue := true
+			cfg.Etcd.DiscoveryViaAPI = &defaultTrue
+		}
+	}
 	if cfg.Etcd.BinPath == "" {
 		cfg.Etcd.BinPath = "/data/services/etcd/bin"
 	}
@@ -81,6 +94,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Server.TLSKey == "" {
 		cfg.Server.TLSKey = "certs/server.key"
+	}
+	if cfg.Server.SessionTimeout <= 0 {
+		cfg.Server.SessionTimeout = 3600
 	}
 	if cfg.Collector.Interval <= 0 {
 		cfg.Collector.Interval = 30

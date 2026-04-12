@@ -304,6 +304,23 @@ body {
     border-color: var(--accent-orange);
 }
 
+.logout-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
 @keyframes spin {
     to { transform: rotate(360deg); }
 }

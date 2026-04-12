@@ -35,5 +35,6 @@ etcdmonitor-linux-amd64
 
 .clauderules
 .claude/
+openspec/
 openspec/**/.openspec.yaml
 openspec/**/\.claude/

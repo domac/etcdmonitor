@@ -83,19 +83,24 @@ func Sync() {
 	}
 }
 
+// IsInitialized 返回 logger 是否已初始化
+func IsInitialized() bool {
+	return sugar != nil
+}
+
 // === Sugar 风格全局函数 ===
 
-func Debug(args ...interface{})                  { sugar.Debug(args...) }
-func Debugf(template string, args ...interface{}) { sugar.Debugf(template, args...) }
+func Debug(args ...interface{})                   { if sugar != nil { sugar.Debug(args...) } }
+func Debugf(template string, args ...interface{}) { if sugar != nil { sugar.Debugf(template, args...) } }
 
-func Info(args ...interface{})                   { sugar.Info(args...) }
-func Infof(template string, args ...interface{})  { sugar.Infof(template, args...) }
+func Info(args ...interface{})                    { if sugar != nil { sugar.Info(args...) } }
+func Infof(template string, args ...interface{})  { if sugar != nil { sugar.Infof(template, args...) } }
 
-func Warn(args ...interface{})                   { sugar.Warn(args...) }
-func Warnf(template string, args ...interface{})  { sugar.Warnf(template, args...) }
+func Warn(args ...interface{})                    { if sugar != nil { sugar.Warn(args...) } }
+func Warnf(template string, args ...interface{})  { if sugar != nil { sugar.Warnf(template, args...) } }
 
-func Error(args ...interface{})                  { sugar.Error(args...) }
-func Errorf(template string, args ...interface{}) { sugar.Errorf(template, args...) }
+func Error(args ...interface{})                   { if sugar != nil { sugar.Error(args...) } }
+func Errorf(template string, args ...interface{}) { if sugar != nil { sugar.Errorf(template, args...) } }
 
-func Fatal(args ...interface{})                  { sugar.Fatal(args...) }
-func Fatalf(template string, args ...interface{}) { sugar.Fatalf(template, args...) }
+func Fatal(args ...interface{})                   { if sugar != nil { sugar.Fatal(args...) } }
+func Fatalf(template string, args ...interface{}) { if sugar != nil { sugar.Fatalf(template, args...) } }

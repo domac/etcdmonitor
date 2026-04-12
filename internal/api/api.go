@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/storage"
@@ -10,27 +12,63 @@ import (
 
 // API 提供 REST 接口给前端 Dashboard
 type API struct {
-	cfg       *config.Config
-	store     *storage.Storage
-	collector *collector.Collector
+	cfg          *config.Config
+	store        *storage.Storage
+	collector    *collector.Collector
+	authRequired bool
+	sessionStore *auth.MemorySessionStore
 }
 
 // New 创建 API 实例
-func New(cfg *config.Config, store *storage.Storage, c *collector.Collector) *API {
+func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, authRequired bool, sessionStore *auth.MemorySessionStore) *API {
 	return &API{
-		cfg:       cfg,
-		store:     store,
-		collector: c,
+		cfg:          cfg,
+		store:        store,
+		collector:    c,
+		authRequired: authRequired,
+		sessionStore: sessionStore,
 	}
 }
 
 // SetupRoutes 注册路由
 func (a *API) SetupRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/members", a.securityHeaders(a.handleMembers))
-	mux.HandleFunc("/api/current", a.securityHeaders(a.handleCurrent))
-	mux.HandleFunc("/api/range", a.securityHeaders(a.handleRange))
-	mux.HandleFunc("/api/status", a.securityHeaders(a.handleStatus))
-	mux.HandleFunc("/api/debug", a.securityHeaders(a.handleDebug))
+	// 公开路由（不受认证中间件保护）
+	mux.HandleFunc("/api/auth/login", a.securityHeaders(auth.HandleLogin(a.cfg, a.sessionStore)))
+	mux.HandleFunc("/api/auth/status", a.securityHeaders(auth.HandleAuthStatus(a.sessionStore, a.authRequired)))
+
+	// 受保护路由（认证模式下需要有效会话）
+	mux.HandleFunc("/api/auth/logout", a.securityHeaders(a.authMiddleware(auth.HandleLogout(a.sessionStore))))
+	mux.HandleFunc("/api/members", a.securityHeaders(a.authMiddleware(a.handleMembers)))
+	mux.HandleFunc("/api/current", a.securityHeaders(a.authMiddleware(a.handleCurrent)))
+	mux.HandleFunc("/api/range", a.securityHeaders(a.authMiddleware(a.handleRange)))
+	mux.HandleFunc("/api/status", a.securityHeaders(a.authMiddleware(a.handleStatus)))
+	mux.HandleFunc("/api/debug", a.securityHeaders(a.authMiddleware(a.handleDebug)))
+}
+
+// authMiddleware 认证中间件
+// authRequired=false 时直接放行；否则从 Cookie 或 Authorization header 获取 token
+func (a *API) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.authRequired {
+			next(w, r)
+			return
+		}
+
+		token := auth.ExtractToken(r)
+		if token == "" || !a.sessionStore.IsValid(token) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "未认证"})
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+// AuthRequired 返回是否需要认证（供外部使用）
+func (a *API) AuthRequired() bool {
+	return a.authRequired
 }
 
 // securityHeaders wraps a handler to add security response headers.

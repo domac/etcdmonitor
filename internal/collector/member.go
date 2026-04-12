@@ -42,7 +42,7 @@ type etcdMemberListJSON struct {
 
 // discoverMembers 根据 auth_enable 配置选择发现方式
 func (c *Collector) discoverMembers() []MemberInfo {
-	if *c.cfg.Etcd.AuthEnable {
+	if *c.cfg.Etcd.DiscoveryViaAPI {
 		return c.discoverMembersViaAPI()
 	}
 	return c.discoverMembersViaCtl()

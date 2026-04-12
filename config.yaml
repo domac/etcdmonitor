@@ -2,16 +2,16 @@
 etcd:
   # etcd 端点地址
   endpoint: "http://127.0.0.1:2379"
-  # 认证用户名
-  username: "root"
-  # 认证密码 - ⚠️ CHANGE THIS BEFORE DEPLOYMENT
-  password: "changeme"
+  # 认证用户名（Collector 采集 etcd 指标使用）
+  username: ""
+  # 认证密码（Collector 采集 etcd 指标使用） - ⚠️ CHANGE THIS BEFORE DEPLOYMENT
+  password: ""
   # metrics 路径
   metrics_path: "/metrics"
-  # 成员发现方式：true = 通过 etcd v3 HTTP API（需开启 gRPC-gateway + auth）
+  # 成员发现方式：true = 通过 etcd v3 HTTP API（需开启 gRPC-gateway）
   #              false = 通过 etcdctl 命令（不依赖 gRPC-gateway）
-  auth_enable: false
-  # etcdctl 所在目录（auth_enable: false 时使用）
+  discovery_via_api: false
+  # etcdctl 所在目录（discovery_via_api: false 时使用）
   bin_path: "/data/services/etcd/bin"
 
 server:
@@ -23,6 +23,9 @@ server:
   tls_cert: "certs/server.crt"
   # TLS 私钥文件路径（相对于程序所在目录）
   tls_key: "certs/server.key"
+  # Dashboard 会话超时时间（秒），当 etcd 启用认证时 Dashboard 需要登录
+  # 默认 3600（1 小时），0 表示不过期
+  session_timeout: 3600
 
 collector:
   # 采集间隔（秒）

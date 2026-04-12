@@ -690,10 +690,37 @@ function updateMemSys(data) {
 
 // === Data Fetching ===
 
+// getAuthHeaders 获取认证请求头
+function getAuthHeaders() {
+    const token = sessionStorage.getItem('etcdmonitor_token');
+    if (token) {
+        return { 'Authorization': 'Bearer ' + token };
+    }
+    return {};
+}
+
+// fetchWithAuth 包装 fetch，带认证 header，401 时自动跳转登录页
+async function fetchWithAuth(url, options) {
+    try {
+        const headers = { ...getAuthHeaders(), ...(options && options.headers || {}) };
+        const resp = await fetch(url, { ...options, headers });
+        if (resp.status === 401) {
+            sessionStorage.removeItem('etcdmonitor_token');
+            window.location.href = '/login.html';
+            return null;
+        }
+        return resp;
+    } catch (e) {
+        console.error('fetchWithAuth error:', e);
+        return null;
+    }
+}
+
 async function fetchCurrent() {
     try {
         const memberParam = currentMemberID ? `?member_id=${currentMemberID}` : '';
-        const resp = await fetch(`/api/current${memberParam}`);
+        const resp = await fetchWithAuth(`/api/current${memberParam}`);
+        if (!resp) return null;
         const data = await resp.json();
         return data.metrics || {};
     } catch (e) {
@@ -707,7 +734,8 @@ async function fetchRange(metrics) {
         const memberParam = currentMemberID ? `&member_id=${currentMemberID}` : '';
         const url = `/api/range?metrics=${metrics.join(',')}&range=${currentRange}${memberParam}`;
         console.log(`[fetchRange] member_id=${currentMemberID}, range=${currentRange}`);
-        const resp = await fetch(url);
+        const resp = await fetchWithAuth(url);
+        if (!resp) return {};
         const data = await resp.json();
         const metricCount = Object.keys(data.metrics || {}).length;
         console.log(`[fetchRange] got ${metricCount} metric series, member_id in response: ${data.member_id}`);
@@ -720,7 +748,8 @@ async function fetchRange(metrics) {
 
 async function fetchStatus() {
     try {
-        const resp = await fetch('/api/status');
+        const resp = await fetchWithAuth('/api/status');
+        if (!resp) return null;
         return await resp.json();
     } catch (e) {
         return null;
@@ -729,7 +758,8 @@ async function fetchStatus() {
 
 async function fetchMembers() {
     try {
-        const resp = await fetch('/api/members');
+        const resp = await fetchWithAuth('/api/members');
+        if (!resp) return null;
         return await resp.json();
     } catch (e) {
         return null;
@@ -947,12 +977,68 @@ function resetRefreshTimer() {
     }
 }
 
-// === Init ===
-document.addEventListener('DOMContentLoaded', () => {
-    applyTheme();
-    initAllCharts();
-    refresh();
+// === Auth State ===
+let authRequired = false;
 
-    // 根据下拉框设置刷新频率
+// === Init ===
+document.addEventListener('DOMContentLoaded', async () => {
+    applyTheme();
+
+    // 图表初始化不依赖认证结果，与 auth 检查并行
+    initAllCharts();
+
+    // 检查认证状态
+    try {
+        const authResp = await fetch('/api/auth/status', { headers: getAuthHeaders() });
+        if (!authResp.ok) {
+            console.error('Auth status check failed with status:', authResp.status);
+            showLoadingError('认证服务异常 (HTTP ' + authResp.status + ')，请刷新重试');
+            return;
+        }
+        const authData = await authResp.json();
+        if (authData.auth_required && !authData.authenticated) {
+            hideLoading();
+            window.location.href = '/login.html';
+            return;
+        }
+        authRequired = !!authData.auth_required;
+    } catch (e) {
+        console.error('Auth status check failed:', e);
+        showLoadingError('无法连接服务，请检查网络后刷新');
+        return;
+    }
+
+    // 显示/隐藏登出按钮
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.style.display = authRequired ? '' : 'none';
+    }
+
+    refresh();
     resetRefreshTimer();
 });
+
+// === Loading Helpers ===
+function hideLoading() {
+    const el = document.getElementById('loading');
+    if (el) el.classList.add('hidden');
+}
+
+function showLoadingError(msg) {
+    const textEl = document.querySelector('.loading-text');
+    if (textEl) textEl.textContent = msg;
+    // 停止 spinner 动画
+    const spinner = document.querySelector('.loading-spinner');
+    if (spinner) spinner.style.display = 'none';
+}
+
+// === Logout ===
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders() });
+    } catch (e) {
+        // ignore
+    }
+    sessionStorage.removeItem('etcdmonitor_token');
+    window.location.href = '/login.html';
+}
