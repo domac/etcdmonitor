@@ -32,3 +32,7 @@ etcdmonitor
 etcdmonitor-linux-amd64
 *.db
 *.log
+
+.clauderules
+.claude/
+openspec/
