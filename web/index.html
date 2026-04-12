@@ -51,6 +51,7 @@
         </select>
         <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="Refresh now">&#8635;</button>
         <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">&#9790;</button>
+        <button class="panel-config-btn" id="panelConfigBtn" onclick="openPanelConfig()" title="Panel settings">&#9881;</button>
         <button class="logout-btn" id="logoutBtn" onclick="logout()" title="Sign out" style="display:none">Logout</button>
         <div class="last-update" id="lastUpdate">-</div>
     </div>
@@ -144,33 +145,33 @@
     </div>
 
     <!-- Raft / Server Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="raft">
         <div class="section-icon server">R</div>
         <div class="section-title">Raft & Server</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="raft">
+        <div class="panel" data-panel-id="chartRaftProposals">
             <div class="panel-header">
                 <span class="panel-title">Raft Proposals</span>
                 <span class="panel-tag">Counter</span>
             </div>
             <div class="panel-body" id="chartRaftProposals"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartLeaderChanges">
             <div class="panel-header">
                 <span class="panel-title">Leader Changes & Slow Operations</span>
                 <span class="panel-tag">Counter</span>
             </div>
             <div class="panel-body" id="chartLeaderChanges"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartProposalLag">
             <div class="panel-header">
                 <span class="panel-title">Proposal Commit-Apply Lag</span>
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartProposalLag"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartProposalFailedRate">
             <div class="panel-header">
                 <span class="panel-title">Proposal Failed Rate</span>
                 <span class="panel-tag">Rate</span>
@@ -180,19 +181,19 @@
     </div>
 
     <!-- Disk Performance Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="disk">
         <div class="section-icon disk">D</div>
         <div class="section-title">Disk Performance</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="disk">
+        <div class="panel" data-panel-id="chartWALFsync">
             <div class="panel-header">
                 <span class="panel-title">WAL Fsync Duration</span>
                 <span class="panel-tag">Histogram</span>
             </div>
             <div class="panel-body" id="chartWALFsync"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartBackendCommit">
             <div class="panel-header">
                 <span class="panel-title">Backend Commit Duration</span>
                 <span class="panel-tag">Histogram</span>
@@ -202,19 +203,19 @@
     </div>
 
     <!-- MVCC / Storage Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="storage">
         <div class="section-icon storage">S</div>
         <div class="section-title">MVCC & Storage</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="storage">
+        <div class="panel" data-panel-id="chartDBSize">
             <div class="panel-header">
                 <span class="panel-title">Database Size</span>
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartDBSize"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartMVCCOps">
             <div class="panel-header">
                 <span class="panel-title">MVCC Operations</span>
                 <span class="panel-tag">Counter</span>
@@ -224,19 +225,19 @@
     </div>
 
     <!-- Network Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="network">
         <div class="section-icon network">N</div>
         <div class="section-title">Network & Peers</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="network">
+        <div class="panel" data-panel-id="chartPeerTraffic">
             <div class="panel-header">
                 <span class="panel-title">Peer Network Traffic</span>
                 <span class="panel-tag">Counter</span>
             </div>
             <div class="panel-body" id="chartPeerTraffic"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartPeerRTT">
             <div class="panel-header">
                 <span class="panel-title">Peer Round Trip Time</span>
                 <span class="panel-tag">Histogram</span>
@@ -246,19 +247,19 @@
     </div>
 
     <!-- gRPC Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="grpc">
         <div class="section-icon grpc">G</div>
         <div class="section-title">gRPC Requests</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="grpc">
+        <div class="panel" data-panel-id="chartGRPC">
             <div class="panel-header">
                 <span class="panel-title">gRPC Request Rate</span>
                 <span class="panel-tag">Counter</span>
             </div>
             <div class="panel-body" id="chartGRPC"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartGRPCTraffic">
             <div class="panel-header">
                 <span class="panel-title">gRPC Client Traffic</span>
                 <span class="panel-tag">Counter</span>
@@ -268,47 +269,47 @@
     </div>
 
     <!-- Process & Runtime Section -->
-    <div class="section-header">
+    <div class="section-header" data-section="runtime">
         <div class="section-icon runtime">P</div>
         <div class="section-title">Process & Runtime</div>
     </div>
-    <div class="panel-grid">
-        <div class="panel">
+    <div class="panel-grid" data-section="runtime">
+        <div class="panel" data-panel-id="chartCPU">
             <div class="panel-header">
                 <span class="panel-title">CPU Usage</span>
                 <span class="panel-tag">Rate</span>
             </div>
             <div class="panel-body" id="chartCPU"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartMemory">
             <div class="panel-header">
                 <span class="panel-title">Memory</span>
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartMemory"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartGoroutines">
             <div class="panel-header">
                 <span class="panel-title">Goroutines</span>
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartGoroutines"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartGC">
             <div class="panel-header">
                 <span class="panel-title">GC Duration</span>
                 <span class="panel-tag">Summary</span>
             </div>
             <div class="panel-body" id="chartGC"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartFDs">
             <div class="panel-header">
                 <span class="panel-title">File Descriptors</span>
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartFDs"></div>
         </div>
-        <div class="panel">
+        <div class="panel" data-panel-id="chartMemSys">
             <div class="panel-header">
                 <span class="panel-title">Memory Sys</span>
                 <span class="panel-tag">Gauge</span>
@@ -319,5 +320,20 @@
 </main>
 
 <script src="app.js"></script>
+
+<!-- Panel Config Modal -->
+<div class="modal-overlay" id="panelConfigModal" style="display:none" onclick="if(event.target===this)closePanelConfig()">
+    <div class="modal-window">
+        <div class="modal-header">
+            <span class="modal-title">Panel Settings</span>
+            <button class="modal-close" onclick="closePanelConfig()" title="Close">&times;</button>
+        </div>
+        <div class="modal-actions">
+            <button class="modal-btn modal-btn-primary" onclick="savePanelConfigUI()">Save</button>
+            <button class="modal-btn modal-btn-secondary" onclick="resetPanelConfigUI()">Reset</button>
+        </div>
+        <div class="modal-body" id="panelConfigList"></div>
+    </div>
+</div>
 </body>
 </html>

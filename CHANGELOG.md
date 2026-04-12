@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.2] - 2026-04-12
+
+### Added
+
+- 监控面板可配置：Dashboard 新增齿轮按钮（⚙），点击弹出面板配置窗口
+- 面板可见性选择：勾选/取消勾选控制 18 个监控面板的显示与隐藏，默认全选
+- 面板拖拽排序：同分区内支持鼠标拖拽排序，禁止跨分区拖拽
+- 保存与重置：配置窗口提供"Save"和"Reset"按钮，重置恢复默认（全选、原始顺序）
+- 用户级持久化：面板配置与登录用户绑定，同一用户不同设备/浏览器看到相同配置
+- 后端用户偏好存储：`internal/prefs/` 包，JSON 文件存储（`data/user-prefs/<username>.json`）
+- 新增 API：`GET /api/user/panel-config`、`PUT /api/user/panel-config`，受认证中间件保护
+- 免认证模式降级：未启用 etcd 认证时，面板配置存储在浏览器 localStorage
+- 分区自动隐藏：分区内全部面板隐藏时，分区标题自动隐藏
+
+### Changed
+
+- 面板 HTML 结构添加 `data-panel-id` 和 `data-section` 属性，支持动态渲染
+- `initAllCharts()` 仅对可见面板初始化 ECharts 实例，隐藏面板自动 dispose 释放资源
+- `api.New()` 签名扩展，新增 `prefsStore` 参数注入
+
 ## [0.3.0] - 2026-04-12
 
 ### Added

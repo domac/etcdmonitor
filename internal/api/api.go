@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
 )
 
@@ -17,16 +19,18 @@ type API struct {
 	collector    *collector.Collector
 	authRequired bool
 	sessionStore *auth.MemorySessionStore
+	prefsStore   *prefs.FileStore
 }
 
 // New 创建 API 实例
-func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, authRequired bool, sessionStore *auth.MemorySessionStore) *API {
+func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, authRequired bool, sessionStore *auth.MemorySessionStore, prefsStore *prefs.FileStore) *API {
 	return &API{
 		cfg:          cfg,
 		store:        store,
 		collector:    c,
 		authRequired: authRequired,
 		sessionStore: sessionStore,
+		prefsStore:   prefsStore,
 	}
 }
 
@@ -43,6 +47,7 @@ func (a *API) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/range", a.securityHeaders(a.authMiddleware(a.handleRange)))
 	mux.HandleFunc("/api/status", a.securityHeaders(a.authMiddleware(a.handleStatus)))
 	mux.HandleFunc("/api/debug", a.securityHeaders(a.authMiddleware(a.handleDebug)))
+	mux.HandleFunc("/api/user/panel-config", a.securityHeaders(a.authMiddleware(a.handlePanelConfig)))
 }
 
 // authMiddleware 认证中间件
@@ -93,4 +98,76 @@ func (a *API) resolveMemberID(r *http.Request) string {
 		memberID = a.collector.GetDefaultMemberID()
 	}
 	return memberID
+}
+
+// getUsername 从请求的 token 中获取用户名
+func (a *API) getUsername(r *http.Request) string {
+	token := auth.ExtractToken(r)
+	if token == "" {
+		return ""
+	}
+	session := a.sessionStore.Get(token)
+	if session == nil {
+		return ""
+	}
+	return session.Username
+}
+
+// handlePanelConfig 处理面板配置的读取和保存
+func (a *API) handlePanelConfig(w http.ResponseWriter, r *http.Request) {
+	// 免认证模式下，前端应使用 localStorage，但后端仍返回默认配置
+	username := a.getUsername(r)
+	if username == "" && a.authRequired {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "未认证"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if username == "" {
+			// 免认证模式返回默认配置
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(prefs.DefaultConfig())
+			return
+		}
+		cfg, err := a.prefsStore.Load(username)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "load config failed"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+
+	case http.MethodPut:
+		if username == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "no user identity"})
+			return
+		}
+
+		var cfg prefs.PanelConfig
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64*1024)).Decode(&cfg); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		if err := a.prefsStore.Save(username, &cfg); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "save config failed"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
+
+	default:
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	}
 }

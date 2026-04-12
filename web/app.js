@@ -10,6 +10,127 @@ let currentRange = '1h';
 let currentMemberID = '';  // 当前选中的成员 ID
 let members = [];          // 所有成员列表
 let currentTheme = localStorage.getItem('etcdmonitor-theme') || 'dark';
+let currentPanelConfig = null; // 当前面板配置
+
+// === Panel Registry ===
+// 每个面板的元数据：ID、显示名称、所属分区、默认顺序
+const PANEL_REGISTRY = [
+    { id: 'chartRaftProposals',    name: 'Raft Proposals',               section: 'raft',    order: 0 },
+    { id: 'chartLeaderChanges',    name: 'Leader Changes & Slow Ops',    section: 'raft',    order: 1 },
+    { id: 'chartProposalLag',      name: 'Proposal Commit-Apply Lag',    section: 'raft',    order: 2 },
+    { id: 'chartProposalFailedRate', name: 'Proposal Failed Rate',       section: 'raft',    order: 3 },
+    { id: 'chartWALFsync',        name: 'WAL Fsync Duration',            section: 'disk',    order: 4 },
+    { id: 'chartBackendCommit',    name: 'Backend Commit Duration',      section: 'disk',    order: 5 },
+    { id: 'chartDBSize',          name: 'Database Size',                  section: 'storage', order: 6 },
+    { id: 'chartMVCCOps',         name: 'MVCC Operations',                section: 'storage', order: 7 },
+    { id: 'chartPeerTraffic',     name: 'Peer Network Traffic',           section: 'network', order: 8 },
+    { id: 'chartPeerRTT',         name: 'Peer Round Trip Time',           section: 'network', order: 9 },
+    { id: 'chartGRPC',            name: 'gRPC Request Rate',              section: 'grpc',    order: 10 },
+    { id: 'chartGRPCTraffic',     name: 'gRPC Client Traffic',            section: 'grpc',    order: 11 },
+    { id: 'chartCPU',             name: 'CPU Usage',                      section: 'runtime', order: 12 },
+    { id: 'chartMemory',          name: 'Memory',                         section: 'runtime', order: 13 },
+    { id: 'chartGoroutines',      name: 'Goroutines',                     section: 'runtime', order: 14 },
+    { id: 'chartGC',              name: 'GC Duration',                    section: 'runtime', order: 15 },
+    { id: 'chartFDs',             name: 'File Descriptors',               section: 'runtime', order: 16 },
+    { id: 'chartMemSys',          name: 'Memory Sys',                     section: 'runtime', order: 17 },
+];
+
+const SECTION_META = {
+    raft:    { label: 'Raft & Server',     icon: 'R', cssClass: 'server' },
+    disk:    { label: 'Disk Performance',  icon: 'D', cssClass: 'disk' },
+    storage: { label: 'MVCC & Storage',    icon: 'S', cssClass: 'storage' },
+    network: { label: 'Network & Peers',   icon: 'N', cssClass: 'network' },
+    grpc:    { label: 'gRPC Requests',     icon: 'G', cssClass: 'grpc' },
+    runtime: { label: 'Process & Runtime', icon: 'P', cssClass: 'runtime' },
+};
+
+// panelID → registry entry 快速查找
+const PANEL_MAP = {};
+PANEL_REGISTRY.forEach(p => { PANEL_MAP[p.id] = p; });
+
+// 默认面板配置
+function defaultPanelConfig() {
+    return {
+        panels: PANEL_REGISTRY.map(p => ({ id: p.id, visible: true, order: p.order })),
+        version: 1
+    };
+}
+
+// 加载面板配置：认证模式走 API，免认证走 localStorage
+async function loadPanelConfig() {
+    if (authRequired) {
+        try {
+            var resp = await fetchWithAuth('/api/user/panel-config');
+            if (resp && resp.ok) {
+                var cfg = await resp.json();
+                if (cfg && cfg.panels && cfg.panels.length > 0) {
+                    return mergePanelConfig(cfg);
+                }
+            }
+        } catch (e) {
+            console.warn('loadPanelConfig API error, using default:', e);
+        }
+        return defaultPanelConfig();
+    } else {
+        try {
+            var raw = localStorage.getItem('etcdmonitor-panel-config');
+            if (raw) {
+                var cfg = JSON.parse(raw);
+                if (cfg && cfg.panels && cfg.panels.length > 0) {
+                    return mergePanelConfig(cfg);
+                }
+            }
+        } catch (e) {
+            console.warn('loadPanelConfig localStorage error, using default:', e);
+        }
+        return defaultPanelConfig();
+    }
+}
+
+// 保存面板配置：认证模式走 API，免认证走 localStorage
+async function savePanelConfig(config) {
+    if (authRequired) {
+        try {
+            await fetchWithAuth('/api/user/panel-config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+        } catch (e) {
+            console.error('savePanelConfig API error:', e);
+        }
+    } else {
+        try {
+            localStorage.setItem('etcdmonitor-panel-config', JSON.stringify(config));
+        } catch (e) {
+            console.error('savePanelConfig localStorage error:', e);
+        }
+    }
+}
+
+// 合并配置：过滤无效 ID，补充缺失的新面板
+function mergePanelConfig(cfg) {
+    var validIds = {};
+    PANEL_REGISTRY.forEach(function(p) { validIds[p.id] = true; });
+
+    var seen = {};
+    var panels = [];
+    // 保留用户已有的合法面板
+    (cfg.panels || []).forEach(function(p) {
+        if (validIds[p.id] && !seen[p.id]) {
+            seen[p.id] = true;
+            panels.push(p);
+        }
+    });
+    // 追加缺失的面板
+    var nextOrder = panels.length;
+    PANEL_REGISTRY.forEach(function(p) {
+        if (!seen[p.id]) {
+            panels.push({ id: p.id, visible: true, order: nextOrder++ });
+        }
+    });
+    return { panels: panels, version: cfg.version || 1 };
+}
 
 // === Theme System ===
 const THEMES = {
@@ -132,26 +253,94 @@ function makeSeries(name, color, data, opts = {}) {
 function initChart(id) {
     const dom = document.getElementById(id);
     if (!dom) return null;
+    // 不要重复初始化
+    if (charts[id]) return charts[id];
     const chart = echarts.init(dom, null, { renderer: 'canvas' });
     charts[id] = chart;
     return chart;
 }
 
 function initAllCharts() {
-    const ids = [
-        'chartRaftProposals', 'chartLeaderChanges',
-        'chartProposalLag', 'chartProposalFailedRate',
-        'chartWALFsync', 'chartBackendCommit',
-        'chartDBSize', 'chartMVCCOps',
-        'chartPeerTraffic', 'chartPeerRTT',
-        'chartGRPC', 'chartGRPCTraffic',
-        'chartCPU', 'chartMemory', 'chartGoroutines', 'chartGC', 'chartFDs', 'chartMemSys'
-    ];
-    ids.forEach(id => initChart(id));
+    // 仅对可见面板初始化 ECharts
+    var visibleIds = getVisiblePanelIds();
+    visibleIds.forEach(id => initChart(id));
 
-    // Resize handling
-    window.addEventListener('resize', () => {
-        Object.values(charts).forEach(c => c && c.resize());
+    // Resize handling（只绑定一次）
+    if (!window._resizeBound) {
+        window.addEventListener('resize', () => {
+            Object.values(charts).forEach(c => c && c.resize());
+        });
+        window._resizeBound = true;
+    }
+}
+
+// 获取当前配置中可见的面板 ID 列表
+function getVisiblePanelIds() {
+    if (!currentPanelConfig || !currentPanelConfig.panels) {
+        return PANEL_REGISTRY.map(p => p.id);
+    }
+    return currentPanelConfig.panels
+        .filter(p => p.visible)
+        .map(p => p.id);
+}
+
+// 渲染面板：根据配置控制显示/隐藏和排序
+function renderPanels(config) {
+    if (!config || !config.panels) return;
+
+    // 构建面板可见性和排序映射
+    var panelVisible = {};
+    var panelOrder = {};
+    config.panels.forEach(function(p) {
+        panelVisible[p.id] = p.visible;
+        panelOrder[p.id] = p.order;
+    });
+
+    // 按分区处理
+    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    sections.forEach(function(section) {
+        var grid = document.querySelector('.panel-grid[data-section="' + section + '"]');
+        var header = document.querySelector('.section-header[data-section="' + section + '"]');
+        if (!grid || !header) return;
+
+        // 获取该分区内的面板元素
+        var panelEls = Array.from(grid.querySelectorAll('.panel[data-panel-id]'));
+        var hasVisible = false;
+
+        // 按配置排序面板
+        panelEls.sort(function(a, b) {
+            var oa = panelOrder[a.dataset.panelId] !== undefined ? panelOrder[a.dataset.panelId] : 999;
+            var ob = panelOrder[b.dataset.panelId] !== undefined ? panelOrder[b.dataset.panelId] : 999;
+            return oa - ob;
+        });
+
+        // 重新排列 DOM 并控制可见性
+        panelEls.forEach(function(el) {
+            var id = el.dataset.panelId;
+            var visible = panelVisible[id] !== false; // 默认可见
+            el.style.display = visible ? '' : 'none';
+            if (visible) hasVisible = true;
+            // 重新插入 DOM 以反映排序
+            grid.appendChild(el);
+        });
+
+        // 分区内全部面板隐藏时隐藏分区标题
+        header.style.display = hasVisible ? '' : 'none';
+        grid.style.display = hasVisible ? '' : 'none';
+    });
+
+    // 对可见面板初始化 ECharts（如果还没初始化）；对隐藏面板释放 ECharts
+    config.panels.forEach(function(p) {
+        if (p.visible) {
+            if (!charts[p.id]) {
+                initChart(p.id);
+            }
+        } else {
+            if (charts[p.id]) {
+                charts[p.id].dispose();
+                delete charts[p.id];
+            }
+        }
     });
 }
 
@@ -984,9 +1173,6 @@ let authRequired = false;
 document.addEventListener('DOMContentLoaded', async () => {
     applyTheme();
 
-    // 图表初始化不依赖认证结果，与 auth 检查并行
-    initAllCharts();
-
     // 检查认证状态
     try {
         const authResp = await fetch('/api/auth/status', { headers: getAuthHeaders() });
@@ -1014,6 +1200,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         logoutBtn.style.display = authRequired ? '' : 'none';
     }
 
+    // 加载面板配置并渲染
+    currentPanelConfig = await loadPanelConfig();
+    renderPanels(currentPanelConfig);
+    initAllCharts();
+
     refresh();
     resetRefreshTimer();
 });
@@ -1030,6 +1221,216 @@ function showLoadingError(msg) {
     // 停止 spinner 动画
     const spinner = document.querySelector('.loading-spinner');
     if (spinner) spinner.style.display = 'none';
+}
+
+// === Panel Config Modal ===
+var _panelConfigDraft = null; // 编辑中的临时配置
+
+function openPanelConfig() {
+    // 创建编辑副本
+    _panelConfigDraft = JSON.parse(JSON.stringify(currentPanelConfig || defaultPanelConfig()));
+    buildPanelConfigList();
+    document.getElementById('panelConfigModal').style.display = '';
+    document.addEventListener('keydown', _panelConfigEscHandler);
+}
+
+function closePanelConfig() {
+    document.getElementById('panelConfigModal').style.display = 'none';
+    document.removeEventListener('keydown', _panelConfigEscHandler);
+    _panelConfigDraft = null;
+}
+
+function _panelConfigEscHandler(e) {
+    if (e.key === 'Escape') closePanelConfig();
+}
+
+function buildPanelConfigList() {
+    var container = document.getElementById('panelConfigList');
+    container.innerHTML = '';
+
+    if (!_panelConfigDraft || !_panelConfigDraft.panels) return;
+
+    // 按分区分组
+    var sectionOrder = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    var grouped = {};
+    sectionOrder.forEach(function(s) { grouped[s] = []; });
+
+    _panelConfigDraft.panels.forEach(function(p, idx) {
+        var reg = PANEL_MAP[p.id];
+        if (!reg) return;
+        grouped[reg.section].push({ panel: p, index: idx, reg: reg });
+    });
+
+    sectionOrder.forEach(function(section) {
+        var items = grouped[section];
+        if (items.length === 0) return;
+        var meta = SECTION_META[section];
+
+        // Section label
+        var label = document.createElement('div');
+        label.className = 'config-section-label';
+        label.textContent = meta.label;
+        container.appendChild(label);
+
+        // Section container for drag scope
+        var sectionDiv = document.createElement('div');
+        sectionDiv.dataset.configSection = section;
+        container.appendChild(sectionDiv);
+
+        // Sort items by order within this section
+        items.sort(function(a, b) { return a.panel.order - b.panel.order; });
+
+        items.forEach(function(item) {
+            var row = document.createElement('div');
+            row.className = 'config-panel-item';
+            row.draggable = true;
+            row.dataset.panelId = item.panel.id;
+            row.dataset.section = section;
+
+            // Drag handle
+            var handle = document.createElement('span');
+            handle.className = 'config-drag-handle';
+            handle.textContent = '\u22EE\u22EE';
+            row.appendChild(handle);
+
+            // Checkbox
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = item.panel.visible;
+            cb.onchange = function() {
+                // Update draft
+                var p = findDraftPanel(item.panel.id);
+                if (p) p.visible = cb.checked;
+            };
+            row.appendChild(cb);
+
+            // Panel name
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'config-panel-name';
+            nameSpan.textContent = item.reg.name;
+            row.appendChild(nameSpan);
+
+            // Section tag
+            var tag = document.createElement('span');
+            tag.className = 'config-panel-section-tag';
+            tag.textContent = meta.label;
+            row.appendChild(tag);
+
+            // Drag events
+            row.addEventListener('dragstart', onDragStart);
+            row.addEventListener('dragend', onDragEnd);
+            row.addEventListener('dragover', onDragOver);
+            row.addEventListener('drop', onDrop);
+            row.addEventListener('dragleave', onDragLeave);
+
+            sectionDiv.appendChild(row);
+        });
+    });
+}
+
+var _dragSrcEl = null;
+
+function onDragStart(e) {
+    _dragSrcEl = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.panelId);
+}
+
+function onDragEnd(e) {
+    this.classList.remove('dragging');
+    // Remove all drag-over indicators
+    document.querySelectorAll('.config-panel-item.drag-over').forEach(function(el) {
+        el.classList.remove('drag-over');
+    });
+    _dragSrcEl = null;
+}
+
+function onDragOver(e) {
+    e.preventDefault();
+    if (!_dragSrcEl) return;
+    // 禁止跨分区拖拽
+    if (this.dataset.section !== _dragSrcEl.dataset.section) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+    }
+    e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+    this.classList.remove('drag-over');
+}
+
+function onDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    if (!_dragSrcEl || _dragSrcEl === this) return;
+    // 禁止跨分区
+    if (this.dataset.section !== _dragSrcEl.dataset.section) return;
+
+    // DOM reorder
+    var parent = this.parentNode;
+    var allItems = Array.from(parent.querySelectorAll('.config-panel-item'));
+    var srcIdx = allItems.indexOf(_dragSrcEl);
+    var tgtIdx = allItems.indexOf(this);
+
+    if (srcIdx < tgtIdx) {
+        parent.insertBefore(_dragSrcEl, this.nextSibling);
+    } else {
+        parent.insertBefore(_dragSrcEl, this);
+    }
+
+    // Update draft order for this section
+    updateDraftOrderFromDOM(this.dataset.section);
+}
+
+function updateDraftOrderFromDOM(section) {
+    var sectionDiv = document.querySelector('[data-config-section="' + section + '"]');
+    if (!sectionDiv) return;
+    var items = Array.from(sectionDiv.querySelectorAll('.config-panel-item'));
+    items.forEach(function(el, idx) {
+        var p = findDraftPanel(el.dataset.panelId);
+        if (p) p.order = idx;
+    });
+}
+
+function findDraftPanel(id) {
+    if (!_panelConfigDraft) return null;
+    return _panelConfigDraft.panels.find(function(p) { return p.id === id; });
+}
+
+async function savePanelConfigUI() {
+    if (!_panelConfigDraft) return;
+
+    // Collect final state from DOM (checkbox states + order)
+    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    var globalOrder = 0;
+    sections.forEach(function(section) {
+        var sectionDiv = document.querySelector('[data-config-section="' + section + '"]');
+        if (!sectionDiv) return;
+        var items = Array.from(sectionDiv.querySelectorAll('.config-panel-item'));
+        items.forEach(function(el) {
+            var p = findDraftPanel(el.dataset.panelId);
+            if (p) {
+                var cb = el.querySelector('input[type="checkbox"]');
+                p.visible = cb ? cb.checked : true;
+                p.order = globalOrder++;
+            }
+        });
+    });
+
+    currentPanelConfig = JSON.parse(JSON.stringify(_panelConfigDraft));
+    await savePanelConfig(currentPanelConfig);
+    renderPanels(currentPanelConfig);
+    closePanelConfig();
+    // 触发一次刷新以确保新可见面板有数据
+    refresh();
+}
+
+function resetPanelConfigUI() {
+    _panelConfigDraft = defaultPanelConfig();
+    buildPanelConfigList();
 }
 
 // === Logout ===
