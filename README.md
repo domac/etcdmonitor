@@ -22,6 +22,8 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Zero dependencies** - Single static binary (~10MB), embeds web UI, SQLite storage, everything
 - **Multi-member cluster** - Auto-discovers all etcd members via `etcdctl`, concurrent metrics collection
 - **50+ metrics, 18 charts** - Covers Raft, disk I/O, MVCC, network, gRPC, Go runtime
+- **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
+- **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
 - **Dark / Light theme** - Toggle with one click, preference saved in browser
 - **HTTPS support** - Optional TLS with bundled self-signed certificates, or bring your own
 - **Auto downsampling** - Smart query aggregation keeps dashboard responsive even with 7 days of data
@@ -72,17 +74,18 @@ Edit `config.yaml`:
 ```yaml
 etcd:
   endpoint: "http://127.0.0.1:2379"
-  username: "root"
-  password: "your-password"
+  username: ""                              # Collector credentials (leave empty if no auth)
+  password: ""
   metrics_path: "/metrics"
-  auth_enable: false                    # true: gRPC-gateway API, false: etcdctl
-  bin_path: "/data/services/etcd/bin"   # etcdctl path (when auth_enable: false)
+  discovery_via_api: false                  # true: gRPC-gateway API, false: etcdctl
+  bin_path: "/data/services/etcd/bin"       # etcdctl path (when discovery_via_api: false)
 
 server:
   listen: ":9090"
-  tls_enable: false                     # true: HTTPS, false: HTTP
+  tls_enable: false                         # true: HTTPS, false: HTTP
   tls_cert: "certs/server.crt"
   tls_key: "certs/server.key"
+  session_timeout: 3600                     # Dashboard session timeout (seconds)
 
 collector:
   interval: 30          # seconds
@@ -93,6 +96,7 @@ storage:
 
 log:
   dir: "logs"
+  level: "info"
   max_size_mb: 50
   max_files: 5
 ```
@@ -100,14 +104,15 @@ log:
 | Parameter | Description | Default |
 |---|---|---|
 | `etcd.endpoint` | etcd client endpoint | `http://127.0.0.1:2379` |
-| `etcd.username` | Auth username (leave empty if no auth) | - |
-| `etcd.password` | Auth password | - |
-| `etcd.auth_enable` | Member discovery: `true` = v3 HTTP API, `false` = etcdctl | `true` |
-| `etcd.bin_path` | etcdctl binary directory (when `auth_enable: false`) | `/data/services/etcd/bin` |
+| `etcd.username` | Collector auth username (leave empty if no auth) | - |
+| `etcd.password` | Collector auth password | - |
+| `etcd.discovery_via_api` | Member discovery: `true` = v3 HTTP API, `false` = etcdctl | `false` |
+| `etcd.bin_path` | etcdctl binary directory (when `discovery_via_api: false`) | `/data/services/etcd/bin` |
 | `server.listen` | Dashboard listen address | `:9090` |
 | `server.tls_enable` | Enable HTTPS | `false` |
 | `server.tls_cert` | TLS certificate file path | `certs/server.crt` |
 | `server.tls_key` | TLS private key file path | `certs/server.key` |
+| `server.session_timeout` | Dashboard login session timeout (seconds), 0 = no expiry | `3600` |
 | `collector.interval` | Metrics collection interval (seconds) | `30` |
 | `storage.retention_days` | Data retention period (days) | `7` |
 
@@ -123,12 +128,14 @@ log:
 │  │ concurrent │   │  member)  │   │  /api/range     │ │
 │  └─────┬──┬──┘   └──────────┘   │  /api/members   │ │
 │        │  │                      │  /api/status     │ │
-│        │  │                      └────────┬────────┘ │
-│        │  │                               │          │
-│    ┌───▼──▼───┐                  ┌────────▼────────┐ │
+│        │  │   ┌──────────┐      │  /api/auth/*     │ │
+│        │  │   │ User     │◀─────│  /api/user/*     │ │
+│        │  │   │ Prefs    │      └────────┬────────┘ │
+│        │  │   │ (JSON)   │               │          │
+│    ┌───▼──▼───┐└──────────┘     ┌────────▼────────┐ │
 │    │  etcd    │                  │  Dashboard      │ │
 │    │ /metrics │                  │  (ECharts)      │ │
-│    │ x N nodes│                  │  Dark / Light   │ │
+│    │ x N nodes│                  │  Login / Config  │ │
 │    └──────────┘                  └─────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
@@ -208,8 +215,8 @@ etcd Monitor automatically discovers all cluster members and collects metrics co
 
 | Mode | Config | How it works | When to use |
 |---|---|---|---|
-| **etcdctl** | `auth_enable: false` | Runs `etcdctl member list -w json` | etcd without gRPC-gateway (most 3.4 setups) |
-| **v3 HTTP API** | `auth_enable: true` | `POST /v3/cluster/member/list` | etcd with gRPC-gateway enabled |
+| **etcdctl** | `discovery_via_api: false` | Runs `etcdctl member list -w json` | etcd without gRPC-gateway (most 3.4 setups) |
+| **v3 HTTP API** | `discovery_via_api: true` | `POST /v3/cluster/member/list` | etcd with gRPC-gateway enabled |
 
 - Members are refreshed every 60 seconds (handles scaling events)
 - Each member's metrics are stored with its own `member_id` in SQLite
@@ -292,10 +299,21 @@ etcdmonitor/
 │   │   ├── member.go           # Cluster member discovery (etcdctl / API)
 │   │   └── parser.go           # Prometheus text format parser
 │   ├── storage/storage.go      # SQLite time-series storage with downsampling
-│   └── api/
-│       ├── api.go              # Router & middleware
-│       └── handler.go          # REST API handlers
+│   ├── auth/
+│   │   ├── auth.go             # Session management & token handling
+│   │   ├── detector.go         # Auto-detect etcd auth status at startup
+│   │   └── handler.go          # Login/logout/status HTTP handlers
+│   ├── prefs/
+│   │   └── prefs.go            # Per-user panel config (JSON file store)
+│   ├── api/
+│   │   ├── api.go              # Router, middleware & panel-config handler
+│   │   └── handler.go          # REST API handlers
+│   └── logger/logger.go        # Zap logger with rotation
 ├── web/                        # Embedded frontend (HTML/CSS/JS + ECharts)
+│   ├── index.html              # Dashboard page
+│   ├── login.html              # Login page (shown when etcd auth enabled)
+│   ├── app.js                  # Dashboard logic, charts, panel config
+│   └── style.css               # Dark/light theme styles
 ├── certs/                      # TLS certificates (generated, git-ignored)
 ├── embed.go                    # go:embed for web assets
 ├── config.yaml                 # Default configuration
@@ -309,13 +327,20 @@ etcdmonitor/
 
 ## API Reference
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/members` | GET | List all cluster members |
-| `/api/current?member_id=<id>` | GET | Latest metrics snapshot for a member |
-| `/api/range?member_id=<id>&metrics=m1,m2&range=1h` | GET | Time-series data for specified metrics |
-| `/api/status` | GET | Monitor system status & cluster info |
-| `/api/debug` | GET | Debug info: DB member IDs, collector state |
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/auth/login` | POST | No | Login with etcd credentials |
+| `/api/auth/logout` | POST | Yes | Logout and invalidate session |
+| `/api/auth/status` | GET | No | Check auth requirement and session status |
+| `/api/members` | GET | Yes | List all cluster members |
+| `/api/current?member_id=<id>` | GET | Yes | Latest metrics snapshot for a member |
+| `/api/range?member_id=<id>&metrics=m1,m2&range=1h` | GET | Yes | Time-series data for specified metrics |
+| `/api/status` | GET | Yes | Monitor system status & cluster info |
+| `/api/user/panel-config` | GET | Yes | Get user's panel visibility & order config |
+| `/api/user/panel-config` | PUT | Yes | Save user's panel visibility & order config |
+| `/api/debug` | GET | Yes | Debug info: DB member IDs, collector state |
+
+> **Auth**: When etcd auth is enabled, protected endpoints require a valid session (via `Authorization: Bearer <token>` header). When etcd auth is not enabled, all endpoints are open.
 
 ## Requirements
 
