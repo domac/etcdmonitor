@@ -154,35 +154,35 @@
         <div class="panel" data-panel-id="chartRaftProposals">
             <div class="panel-header">
                 <span class="panel-title">Raft Proposals</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartRaftProposals"></div>
         </div>
         <div class="panel" data-panel-id="chartLeaderChanges">
             <div class="panel-header">
                 <span class="panel-title">Leader Changes & Slow Operations</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartLeaderChanges"></div>
         </div>
         <div class="panel" data-panel-id="chartProposalLag">
             <div class="panel-header">
                 <span class="panel-title">Proposal Commit-Apply Lag</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartProposalLag"></div>
         </div>
         <div class="panel" data-panel-id="chartProposalFailedRate">
             <div class="panel-header">
                 <span class="panel-title">Proposal Failed Rate</span>
-                <span class="panel-tag">Rate</span>
+                <span class="panel-header-actions"><span class="panel-tag">Rate</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartProposalFailedRate"></div>
         </div>
         <div class="panel" data-panel-id="chartServerHealth">
             <div class="panel-header">
                 <span class="panel-title">Server Health & Quota</span>
-                <span class="panel-tag">Mixed</span>
+                <span class="panel-header-actions"><span class="panel-tag">Mixed</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartServerHealth"></div>
         </div>
@@ -197,28 +197,28 @@
         <div class="panel" data-panel-id="chartWALFsync">
             <div class="panel-header">
                 <span class="panel-title">WAL Fsync Duration</span>
-                <span class="panel-tag">Histogram</span>
+                <span class="panel-header-actions"><span class="panel-tag">Histogram</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartWALFsync"></div>
         </div>
         <div class="panel" data-panel-id="chartBackendCommit">
             <div class="panel-header">
                 <span class="panel-title">Backend Commit Duration</span>
-                <span class="panel-tag">Histogram</span>
+                <span class="panel-header-actions"><span class="panel-tag">Histogram</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartBackendCommit"></div>
         </div>
         <div class="panel" data-panel-id="chartSnapshotDefrag">
             <div class="panel-header">
                 <span class="panel-title">Snapshot & Defrag Duration</span>
-                <span class="panel-tag">Histogram</span>
+                <span class="panel-header-actions"><span class="panel-tag">Histogram</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartSnapshotDefrag"></div>
         </div>
         <div class="panel" data-panel-id="chartBackendBreakdown">
             <div class="panel-header">
                 <span class="panel-title">Backend Commit Breakdown</span>
-                <span class="panel-tag">Histogram</span>
+                <span class="panel-header-actions"><span class="panel-tag">Histogram</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartBackendBreakdown"></div>
         </div>
@@ -233,28 +233,28 @@
         <div class="panel" data-panel-id="chartDBSize">
             <div class="panel-header">
                 <span class="panel-title">Database Size</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartDBSize"></div>
         </div>
         <div class="panel" data-panel-id="chartMVCCOps">
             <div class="panel-header">
                 <span class="panel-title">MVCC Operations</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartMVCCOps"></div>
         </div>
         <div class="panel" data-panel-id="chartMVCCCompaction">
             <div class="panel-header">
                 <span class="panel-title">MVCC Revisions & Compaction</span>
-                <span class="panel-tag">Mixed</span>
+                <span class="panel-header-actions"><span class="panel-tag">Mixed</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartMVCCCompaction"></div>
         </div>
         <div class="panel" data-panel-id="chartWatcherEvents">
             <div class="panel-header">
                 <span class="panel-title">Watcher & Events</span>
-                <span class="panel-tag">Mixed</span>
+                <span class="panel-header-actions"><span class="panel-tag">Mixed</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartWatcherEvents"></div>
         </div>
@@ -269,21 +269,21 @@
         <div class="panel" data-panel-id="chartPeerTraffic">
             <div class="panel-header">
                 <span class="panel-title">Peer Network Traffic</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartPeerTraffic"></div>
         </div>
         <div class="panel" data-panel-id="chartPeerRTT">
             <div class="panel-header">
                 <span class="panel-title">Peer Round Trip Time</span>
-                <span class="panel-tag">Histogram</span>
+                <span class="panel-header-actions"><span class="panel-tag">Histogram</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartPeerRTT"></div>
         </div>
         <div class="panel" data-panel-id="chartActivePeersGRPC">
             <div class="panel-header">
                 <span class="panel-title">Active Peers & gRPC Messages</span>
-                <span class="panel-tag">Mixed</span>
+                <span class="panel-header-actions"><span class="panel-tag">Mixed</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartActivePeersGRPC"></div>
         </div>
@@ -298,14 +298,14 @@
         <div class="panel" data-panel-id="chartGRPC">
             <div class="panel-header">
                 <span class="panel-title">gRPC Request Rate</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartGRPC"></div>
         </div>
         <div class="panel" data-panel-id="chartGRPCTraffic">
             <div class="panel-header">
                 <span class="panel-title">gRPC Client Traffic</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartGRPCTraffic"></div>
         </div>
@@ -320,42 +320,42 @@
         <div class="panel" data-panel-id="chartCPU">
             <div class="panel-header">
                 <span class="panel-title">CPU Usage</span>
-                <span class="panel-tag">Rate</span>
+                <span class="panel-header-actions"><span class="panel-tag">Rate</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartCPU"></div>
         </div>
         <div class="panel" data-panel-id="chartMemory">
             <div class="panel-header">
                 <span class="panel-title">Memory</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartMemory"></div>
         </div>
         <div class="panel" data-panel-id="chartGoroutines">
             <div class="panel-header">
                 <span class="panel-title">Goroutines</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartGoroutines"></div>
         </div>
         <div class="panel" data-panel-id="chartGC">
             <div class="panel-header">
                 <span class="panel-title">GC Duration</span>
-                <span class="panel-tag">Summary</span>
+                <span class="panel-header-actions"><span class="panel-tag">Summary</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartGC"></div>
         </div>
         <div class="panel" data-panel-id="chartFDs">
             <div class="panel-header">
                 <span class="panel-title">File Descriptors</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartFDs"></div>
         </div>
         <div class="panel" data-panel-id="chartMemSys">
             <div class="panel-header">
                 <span class="panel-title">Memory Sys</span>
-                <span class="panel-tag">Gauge</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartMemSys"></div>
         </div>
@@ -370,7 +370,7 @@
         <div class="panel" data-panel-id="chartLeaseActivity">
             <div class="panel-header">
                 <span class="panel-title">Lease Activity</span>
-                <span class="panel-tag">Counter</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartLeaseActivity"></div>
         </div>

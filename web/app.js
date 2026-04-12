@@ -1240,6 +1240,14 @@ async function refresh() {
 
     // Hide loading
     document.getElementById('loading').classList.add('hidden');
+
+    // Ensure maximized panel ECharts stays correctly sized after data update
+    if (_maximizedPanel) {
+        var mid = _maximizedPanel.getAttribute('data-panel-id');
+        if (mid && charts[mid]) {
+            setTimeout(function() { charts[mid].resize(); }, 0);
+        }
+    }
 }
 
 // === Member Management ===
@@ -1407,6 +1415,93 @@ document.addEventListener('DOMContentLoaded', async () => {
     refresh();
     resetRefreshTimer();
 });
+
+// === Panel Maximize / Minimize ===
+const MAXIMIZE_SVG = '<svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+const MINIMIZE_SVG = '<svg viewBox="0 0 24 24"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+
+let _maximizedPanel = null;
+let _maximizeBackdrop = null;
+
+function togglePanelMaximize(btn) {
+    var panel = btn.closest('.panel');
+    if (!panel) return;
+    if (panel.classList.contains('maximized')) {
+        minimizePanel(panel, btn);
+    } else {
+        maximizePanel(panel, btn);
+    }
+}
+
+function maximizePanel(panel, btn) {
+    // 如果已有其他面板最大化，先还原
+    if (_maximizedPanel && _maximizedPanel !== panel) {
+        var otherBtn = _maximizedPanel.querySelector('.panel-maximize-btn');
+        minimizePanel(_maximizedPanel, otherBtn);
+    }
+
+    // 创建遮罩
+    if (!_maximizeBackdrop) {
+        _maximizeBackdrop = document.createElement('div');
+        _maximizeBackdrop.className = 'maximize-backdrop';
+        _maximizeBackdrop.onclick = function() {
+            if (_maximizedPanel) {
+                var b = _maximizedPanel.querySelector('.panel-maximize-btn');
+                minimizePanel(_maximizedPanel, b);
+            }
+        };
+    }
+    document.body.appendChild(_maximizeBackdrop);
+
+    // 最大化面板
+    panel.classList.add('maximized');
+    document.body.style.overflow = 'hidden';
+    _maximizedPanel = panel;
+
+    // 切换图标为最小化
+    if (btn) btn.innerHTML = MINIMIZE_SVG;
+    if (btn) btn.title = 'Minimize';
+
+    // 注册 ESC 监听
+    document.addEventListener('keydown', _maximizeEscHandler);
+
+    // Resize ECharts
+    var chartId = panel.getAttribute('data-panel-id');
+    if (chartId && charts[chartId]) {
+        setTimeout(function() { charts[chartId].resize(); }, 0);
+    }
+}
+
+function minimizePanel(panel, btn) {
+    panel.classList.remove('maximized');
+    document.body.style.overflow = '';
+    _maximizedPanel = null;
+
+    // 移除遮罩
+    if (_maximizeBackdrop && _maximizeBackdrop.parentNode) {
+        _maximizeBackdrop.parentNode.removeChild(_maximizeBackdrop);
+    }
+
+    // 切换图标为最大化
+    if (btn) btn.innerHTML = MAXIMIZE_SVG;
+    if (btn) btn.title = 'Maximize';
+
+    // 移除 ESC 监听
+    document.removeEventListener('keydown', _maximizeEscHandler);
+
+    // Resize ECharts
+    var chartId = panel.getAttribute('data-panel-id');
+    if (chartId && charts[chartId]) {
+        setTimeout(function() { charts[chartId].resize(); }, 0);
+    }
+}
+
+function _maximizeEscHandler(e) {
+    if (e.key === 'Escape' && _maximizedPanel) {
+        var btn = _maximizedPanel.querySelector('.panel-maximize-btn');
+        minimizePanel(_maximizedPanel, btn);
+    }
+}
 
 // === Loading Helpers ===
 function hideLoading() {

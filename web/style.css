@@ -526,6 +526,81 @@ body {
     height: 340px;
 }
 
+/* === Panel Maximize / Minimize === */
+.panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-maximize-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+}
+
+.panel-maximize-btn:hover {
+    opacity: 0.9;
+}
+
+.panel-maximize-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke: var(--text-secondary);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.panel.maximized .panel-maximize-btn svg {
+    stroke: var(--text-primary);
+}
+
+/* Maximized panel */
+.panel.maximized {
+    position: fixed;
+    z-index: 1000;
+    top: 72px;
+    left: 24px;
+    right: 24px;
+    bottom: 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.panel.maximized .panel-body {
+    flex: 1;
+    height: auto;
+}
+
+.panel.maximized .panel-maximize-btn {
+    opacity: 0.6;
+}
+
+/* Backdrop */
+.maximize-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
 /* === Section Headers === */
 .section-header {
     display: flex;
