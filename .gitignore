@@ -38,3 +38,4 @@ etcdmonitor-linux-amd64
 openspec/
 openspec/**/.openspec.yaml
 openspec/**/\.claude/
+CLAUDE.md
