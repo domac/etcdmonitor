@@ -44,6 +44,14 @@ var DefaultPanels = []PanelItem{
 	{ID: "chartGC", Visible: true, Order: 15},
 	{ID: "chartFDs", Visible: true, Order: 16},
 	{ID: "chartMemSys", Visible: true, Order: 17},
+	// === 扩展面板（默认隐藏） ===
+	{ID: "chartServerHealth", Visible: false, Order: 18},
+	{ID: "chartSnapshotDefrag", Visible: false, Order: 19},
+	{ID: "chartBackendBreakdown", Visible: false, Order: 20},
+	{ID: "chartMVCCCompaction", Visible: false, Order: 21},
+	{ID: "chartWatcherEvents", Visible: false, Order: 22},
+	{ID: "chartLeaseActivity", Visible: false, Order: 23},
+	{ID: "chartActivePeersGRPC", Visible: false, Order: 24},
 }
 
 // DefaultConfig 返回默认面板配置
@@ -162,13 +170,13 @@ func mergeWithDefaults(panels []PanelItem) []PanelItem {
 		}
 	}
 
-	// 追加缺失的面板（默认可见，order 排在末尾）
+	// 追加缺失的面板（使用 DefaultPanels 中的默认可见性，order 排在末尾）
 	nextOrder := len(result)
 	for _, dp := range DefaultPanels {
 		if !seen[dp.ID] {
 			result = append(result, PanelItem{
 				ID:      dp.ID,
-				Visible: true,
+				Visible: dp.Visible,
 				Order:   nextOrder,
 			})
 			nextOrder++

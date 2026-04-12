@@ -179,6 +179,13 @@
             </div>
             <div class="panel-body" id="chartProposalFailedRate"></div>
         </div>
+        <div class="panel" data-panel-id="chartServerHealth">
+            <div class="panel-header">
+                <span class="panel-title">Server Health & Quota</span>
+                <span class="panel-tag">Mixed</span>
+            </div>
+            <div class="panel-body" id="chartServerHealth"></div>
+        </div>
     </div>
 
     <!-- Disk Performance Section -->
@@ -200,6 +207,20 @@
                 <span class="panel-tag">Histogram</span>
             </div>
             <div class="panel-body" id="chartBackendCommit"></div>
+        </div>
+        <div class="panel" data-panel-id="chartSnapshotDefrag">
+            <div class="panel-header">
+                <span class="panel-title">Snapshot & Defrag Duration</span>
+                <span class="panel-tag">Histogram</span>
+            </div>
+            <div class="panel-body" id="chartSnapshotDefrag"></div>
+        </div>
+        <div class="panel" data-panel-id="chartBackendBreakdown">
+            <div class="panel-header">
+                <span class="panel-title">Backend Commit Breakdown</span>
+                <span class="panel-tag">Histogram</span>
+            </div>
+            <div class="panel-body" id="chartBackendBreakdown"></div>
         </div>
     </div>
 
@@ -223,6 +244,20 @@
             </div>
             <div class="panel-body" id="chartMVCCOps"></div>
         </div>
+        <div class="panel" data-panel-id="chartMVCCCompaction">
+            <div class="panel-header">
+                <span class="panel-title">MVCC Revisions & Compaction</span>
+                <span class="panel-tag">Mixed</span>
+            </div>
+            <div class="panel-body" id="chartMVCCCompaction"></div>
+        </div>
+        <div class="panel" data-panel-id="chartWatcherEvents">
+            <div class="panel-header">
+                <span class="panel-title">Watcher & Events</span>
+                <span class="panel-tag">Mixed</span>
+            </div>
+            <div class="panel-body" id="chartWatcherEvents"></div>
+        </div>
     </div>
 
     <!-- Network Section -->
@@ -244,6 +279,13 @@
                 <span class="panel-tag">Histogram</span>
             </div>
             <div class="panel-body" id="chartPeerRTT"></div>
+        </div>
+        <div class="panel" data-panel-id="chartActivePeersGRPC">
+            <div class="panel-header">
+                <span class="panel-title">Active Peers & gRPC Messages</span>
+                <span class="panel-tag">Mixed</span>
+            </div>
+            <div class="panel-body" id="chartActivePeersGRPC"></div>
         </div>
     </div>
 
@@ -316,6 +358,21 @@
                 <span class="panel-tag">Gauge</span>
             </div>
             <div class="panel-body" id="chartMemSys"></div>
+        </div>
+    </div>
+
+    <!-- Lease Management Section -->
+    <div class="section-header" data-section="lease">
+        <div class="section-icon lease">L</div>
+        <div class="section-title">Lease Management</div>
+    </div>
+    <div class="panel-grid" data-section="lease">
+        <div class="panel" data-panel-id="chartLeaseActivity">
+            <div class="panel-header">
+                <span class="panel-title">Lease Activity</span>
+                <span class="panel-tag">Counter</span>
+            </div>
+            <div class="panel-body" id="chartLeaseActivity"></div>
         </div>
     </div>
 </main>

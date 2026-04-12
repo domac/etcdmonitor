@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.3] - 2026-04-12
+
+### Added
+
+- 新增 7 个扩展监控面板（默认隐藏）：
+- Collector 新增约 30 项 etcd 指标采集，覆盖 Server/Disk/MVCC/Lease/Network/gRPC 扩展指标
+- 新增 `ExtractHistogramMs` 解析器，自动将毫秒单位 Histogram 转换为秒
+- 新增 `ExtractClientRequests` 解析器，按 `client_api_version` 标签聚合 client_requests_total
+
+### Changed
+
+- 面板标签（Counter/Gauge/Rate 等）默认隐藏，保持界面简洁
+- `DefaultPanels` 扩展至 25 项，新增 7 个扩展面板（Order 18–24，Visible: false）
+- `mergeWithDefaults` 升级配置时使用 DefaultPanels 中的默认可见性，而非硬编码 true
+- 前端 `PANEL_REGISTRY` 扩展至 25 项，`ALL_RANGE_METRICS` 新增约 50 个指标名
+
 ## [0.3.2] - 2026-04-12
 
 ### Added

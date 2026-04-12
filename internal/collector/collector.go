@@ -292,10 +292,43 @@ func (c *Collector) parseMetrics(body io.Reader, member MemberInfo, now time.Tim
 		case family.Name == "etcd_server_slow_read_indexes_total":
 			snapshot["etcd_server_slow_read_indexes_total"] = FirstValue(family)
 
+		// === Server 扩展指标 ===
+		case family.Name == "etcd_server_quota_backend_bytes":
+			snapshot["etcd_server_quota_backend_bytes"] = FirstValue(family)
+		case family.Name == "etcd_server_heartbeat_send_failures_total":
+			snapshot["etcd_server_heartbeat_send_failures_total"] = FirstValue(family)
+		case family.Name == "etcd_server_read_indexes_failed_total":
+			snapshot["etcd_server_read_indexes_failed_total"] = FirstValue(family)
+		case family.Name == "etcd_server_client_requests_total":
+			ExtractClientRequests(family, snapshot)
+		case family.Name == "etcd_server_health_failures":
+			snapshot["etcd_server_health_failures"] = FirstValue(family)
+		case family.Name == "etcd_server_health_success":
+			snapshot["etcd_server_health_success"] = FirstValue(family)
+
 		case family.Name == "etcd_disk_wal_fsync_duration_seconds":
 			ExtractHistogram(family, "etcd_disk_wal_fsync_duration_seconds", snapshot)
 		case family.Name == "etcd_disk_backend_commit_duration_seconds":
 			ExtractHistogram(family, "etcd_disk_backend_commit_duration_seconds", snapshot)
+
+		// === Disk 扩展指标 ===
+		case family.Name == "etcd_disk_backend_defrag_duration_seconds":
+			ExtractHistogram(family, "etcd_disk_backend_defrag_duration_seconds", snapshot)
+		case family.Name == "etcd_disk_backend_snapshot_duration_seconds":
+			ExtractHistogram(family, "etcd_disk_backend_snapshot_duration_seconds", snapshot)
+		case family.Name == "etcd_disk_wal_write_bytes_total":
+			snapshot["etcd_disk_wal_write_bytes_total"] = FirstValue(family)
+		case family.Name == "etcd_snap_db_fsync_duration_seconds":
+			ExtractHistogram(family, "etcd_snap_db_fsync_duration_seconds", snapshot)
+		case family.Name == "etcd_snap_db_save_total_duration_seconds":
+			ExtractHistogram(family, "etcd_snap_db_save_total_duration_seconds", snapshot)
+		// Backend commit 子阶段
+		case family.Name == "etcd_debugging_disk_backend_commit_rebalance_duration_seconds":
+			ExtractHistogram(family, "etcd_disk_commit_rebalance_duration_seconds", snapshot)
+		case family.Name == "etcd_debugging_disk_backend_commit_spill_duration_seconds":
+			ExtractHistogram(family, "etcd_disk_commit_spill_duration_seconds", snapshot)
+		case family.Name == "etcd_debugging_disk_backend_commit_write_duration_seconds":
+			ExtractHistogram(family, "etcd_disk_commit_write_duration_seconds", snapshot)
 
 		case family.Name == "etcd_mvcc_db_total_size_in_bytes":
 			snapshot["etcd_mvcc_db_total_size_in_bytes"] = FirstValue(family)
@@ -320,6 +353,28 @@ func (c *Collector) parseMetrics(body io.Reader, member MemberInfo, now time.Tim
 		case family.Name == "etcd_debugging_mvcc_db_open_read_transactions":
 			snapshot["etcd_mvcc_db_open_read_transactions"] = FirstValue(family)
 
+		// === MVCC 扩展指标 ===
+		case family.Name == "etcd_debugging_mvcc_compact_revision":
+			snapshot["etcd_mvcc_compact_revision"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_current_revision":
+			snapshot["etcd_mvcc_current_revision"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_events_total":
+			snapshot["etcd_mvcc_events_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_pending_events_total":
+			snapshot["etcd_mvcc_pending_events_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_total_put_size_in_bytes":
+			snapshot["etcd_mvcc_total_put_size_in_bytes"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_db_compaction_keys_total":
+			snapshot["etcd_mvcc_db_compaction_keys_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_mvcc_db_compaction_pause_duration_milliseconds":
+			ExtractHistogramMs(family, "etcd_mvcc_db_compaction_pause_duration", snapshot)
+		case family.Name == "etcd_debugging_mvcc_db_compaction_total_duration_milliseconds":
+			ExtractHistogramMs(family, "etcd_mvcc_db_compaction_total_duration", snapshot)
+		case family.Name == "etcd_mvcc_hash_duration_seconds":
+			ExtractHistogram(family, "etcd_mvcc_hash_duration_seconds", snapshot)
+		case family.Name == "etcd_mvcc_hash_rev_duration_seconds":
+			ExtractHistogram(family, "etcd_mvcc_hash_rev_duration_seconds", snapshot)
+
 		case family.Name == "etcd_network_peer_sent_bytes_total":
 			snapshot["etcd_network_peer_sent_bytes_total"] = SumValues(family)
 		case family.Name == "etcd_network_peer_received_bytes_total":
@@ -335,10 +390,29 @@ func (c *Collector) parseMetrics(body io.Reader, member MemberInfo, now time.Tim
 		case family.Name == "etcd_network_client_grpc_received_bytes_total":
 			snapshot["etcd_network_client_grpc_received_bytes_total"] = FirstValue(family)
 
+		// === Lease 指标 ===
+		case family.Name == "etcd_debugging_lease_granted_total":
+			snapshot["etcd_lease_granted_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_lease_revoked_total":
+			snapshot["etcd_lease_revoked_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_lease_renewed_total":
+			snapshot["etcd_lease_renewed_total"] = FirstValue(family)
+		case family.Name == "etcd_debugging_server_lease_expired_total":
+			snapshot["etcd_lease_expired_total"] = FirstValue(family)
+
+		// === Network 扩展指标 ===
+		case family.Name == "etcd_network_active_peers":
+			snapshot["etcd_network_active_peers"] = FirstValue(family)
+
 		case family.Name == "grpc_server_handled_total":
 			ExtractGRPCMetrics(family, snapshot)
 		case family.Name == "grpc_server_started_total":
 			snapshot["grpc_server_started_total"] = SumValues(family)
+		// === gRPC 扩展指标 ===
+		case family.Name == "grpc_server_msg_received_total":
+			snapshot["grpc_server_msg_received_total"] = SumValues(family)
+		case family.Name == "grpc_server_msg_sent_total":
+			snapshot["grpc_server_msg_sent_total"] = SumValues(family)
 
 		case family.Name == "process_cpu_seconds_total":
 			snapshot["process_cpu_seconds_total"] = FirstValue(family)

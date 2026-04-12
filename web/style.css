@@ -556,6 +556,7 @@ body {
 .section-icon.network { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); }
 .section-icon.grpc { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); }
 .section-icon.runtime { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }
+.section-icon.lease { background: rgba(210, 153, 34, 0.15); color: var(--accent-orange); }
 
 .section-title {
     font-size: 16px;

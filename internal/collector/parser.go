@@ -344,3 +344,42 @@ func ExtractGRPCMetrics(family MetricFamily, snapshot map[string]float64) {
 		snapshot[fmt.Sprintf("grpc_method_%d_count", i)] = item.count
 	}
 }
+
+// ExtractHistogramMs 从 milliseconds 单位的 Histogram 提取 p50/p90/p99，转换为秒存储
+func ExtractHistogramMs(family MetricFamily, prefix string, snapshot map[string]float64) {
+	ExtractHistogram(family, prefix, snapshot)
+	// 将 ms 转换为 s
+	for _, suffix := range []string{"_p50", "_p90", "_p99"} {
+		if v, ok := snapshot[prefix+suffix]; ok {
+			snapshot[prefix+suffix] = v / 1000.0
+		}
+	}
+}
+
+// ExtractClientRequests 按 client_api_version label 聚合 client_requests_total
+func ExtractClientRequests(family MetricFamily, snapshot map[string]float64) {
+	var total float64
+	versionCounts := make(map[string]float64)
+
+	for _, m := range family.Metrics {
+		if _, ok := m.Labels["le"]; ok {
+			continue
+		}
+		if _, ok := m.Labels["quantile"]; ok {
+			continue
+		}
+		total += m.Value
+		version := m.Labels["client_api_version"]
+		if version == "" {
+			version = "unknown"
+		}
+		versionCounts[version] += m.Value
+	}
+
+	snapshot["etcd_server_client_requests_total"] = total
+	for version, count := range versionCounts {
+		// 规范化版本号：去掉点号以简化存储 key
+		key := "etcd_server_client_requests_" + strings.Replace(version, ".", "", -1)
+		snapshot[key] = count
+	}
+}

@@ -33,6 +33,14 @@ const PANEL_REGISTRY = [
     { id: 'chartGC',              name: 'GC Duration',                    section: 'runtime', order: 15 },
     { id: 'chartFDs',             name: 'File Descriptors',               section: 'runtime', order: 16 },
     { id: 'chartMemSys',          name: 'Memory Sys',                     section: 'runtime', order: 17 },
+    // === 扩展面板（默认隐藏） ===
+    { id: 'chartServerHealth',     name: 'Server Health & Quota',          section: 'raft',    order: 18 },
+    { id: 'chartSnapshotDefrag',   name: 'Snapshot & Defrag Duration',     section: 'disk',    order: 19 },
+    { id: 'chartBackendBreakdown', name: 'Backend Commit Breakdown',       section: 'disk',    order: 20 },
+    { id: 'chartMVCCCompaction',   name: 'MVCC Revisions & Compaction',    section: 'storage', order: 21 },
+    { id: 'chartWatcherEvents',    name: 'Watcher & Events',               section: 'storage', order: 22 },
+    { id: 'chartLeaseActivity',    name: 'Lease Activity',                 section: 'lease',   order: 23 },
+    { id: 'chartActivePeersGRPC',  name: 'Active Peers & gRPC Messages',   section: 'network', order: 24 },
 ];
 
 const SECTION_META = {
@@ -42,16 +50,17 @@ const SECTION_META = {
     network: { label: 'Network & Peers',   icon: 'N', cssClass: 'network' },
     grpc:    { label: 'gRPC Requests',     icon: 'G', cssClass: 'grpc' },
     runtime: { label: 'Process & Runtime', icon: 'P', cssClass: 'runtime' },
+    lease:   { label: 'Lease Management',  icon: 'L', cssClass: 'lease' },
 };
 
 // panelID → registry entry 快速查找
 const PANEL_MAP = {};
 PANEL_REGISTRY.forEach(p => { PANEL_MAP[p.id] = p; });
 
-// 默认面板配置
+// 默认面板配置（前 18 个可见，扩展面板默认隐藏）
 function defaultPanelConfig() {
     return {
-        panels: PANEL_REGISTRY.map(p => ({ id: p.id, visible: true, order: p.order })),
+        panels: PANEL_REGISTRY.map(p => ({ id: p.id, visible: p.order < 18, order: p.order })),
         version: 1
     };
 }
@@ -122,11 +131,14 @@ function mergePanelConfig(cfg) {
             panels.push(p);
         }
     });
-    // 追加缺失的面板
+    // 追加缺失的面板（使用默认配置中的可见性）
+    var defaults = defaultPanelConfig();
+    var defaultVisible = {};
+    defaults.panels.forEach(function(p) { defaultVisible[p.id] = p.visible; });
     var nextOrder = panels.length;
     PANEL_REGISTRY.forEach(function(p) {
         if (!seen[p.id]) {
-            panels.push({ id: p.id, visible: true, order: nextOrder++ });
+            panels.push({ id: p.id, visible: defaultVisible[p.id] !== undefined ? defaultVisible[p.id] : true, order: nextOrder++ });
         }
     });
     return { panels: panels, version: cfg.version || 1 };
@@ -297,7 +309,7 @@ function renderPanels(config) {
     });
 
     // 按分区处理
-    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime', 'lease'];
     sections.forEach(function(section) {
         var grid = document.querySelector('.panel-grid[data-section="' + section + '"]');
         var header = document.querySelector('.section-header[data-section="' + section + '"]');
@@ -877,6 +889,156 @@ function updateMemSys(data) {
     });
 }
 
+// === Extended Chart Updates ===
+
+function updateServerHealth(data) {
+    const chart = charts['chartServerHealth'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        series: [
+            makeSeries('Client Requests (v3.5)', COLORS_().blue, data['etcd_server_client_requests_v35'], { area: true }),
+            makeSeries('Client Requests (v3.4)', COLORS_().orange, data['etcd_server_client_requests_v34']),
+            makeSeries('Client Requests (unknown)', COLORS_().gray, data['etcd_server_client_requests_unknown']),
+            makeSeries('Heartbeat Failures', COLORS_().red, data['etcd_server_heartbeat_send_failures_total']),
+            makeSeries('Health Failures', COLORS_().pink, data['etcd_server_health_failures']),
+            makeSeries('Read Index Failures', COLORS_().purple, data['etcd_server_read_indexes_failed_total'])
+        ]
+    });
+}
+
+function updateSnapshotDefrag(data) {
+    const chart = charts['chartSnapshotDefrag'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: {
+            ...TOOLTIP_(),
+            formatter: params => {
+                let html = formatTime(params[0].value[0] / 1000) + '<br/>';
+                params.forEach(p => { html += `${p.marker} ${p.seriesName}: ${formatDuration(p.value[1])}<br/>`; });
+                return html;
+            }
+        },
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatDuration(v) } },
+        series: [
+            makeSeries('Defrag P99', COLORS_().red, data['etcd_disk_backend_defrag_duration_seconds_p99']),
+            makeSeries('Snapshot P99', COLORS_().orange, data['etcd_disk_backend_snapshot_duration_seconds_p99']),
+            makeSeries('Snap DB Fsync P99', COLORS_().purple, data['etcd_snap_db_fsync_duration_seconds_p99']),
+            makeSeries('Snap DB Save P99', COLORS_().blue, data['etcd_snap_db_save_total_duration_seconds_p99'])
+        ]
+    });
+}
+
+function updateBackendBreakdown(data) {
+    const chart = charts['chartBackendBreakdown'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: {
+            ...TOOLTIP_(),
+            formatter: params => {
+                let html = formatTime(params[0].value[0] / 1000) + '<br/>';
+                params.forEach(p => { html += `${p.marker} ${p.seriesName}: ${formatDuration(p.value[1])}<br/>`; });
+                return html;
+            }
+        },
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatDuration(v) } },
+        series: [
+            makeSeries('Rebalance P50', COLORS_().green, data['etcd_disk_commit_rebalance_duration_seconds_p50'], { area: true }),
+            makeSeries('Rebalance P99', COLORS_().red, data['etcd_disk_commit_rebalance_duration_seconds_p99']),
+            makeSeries('Spill P50', COLORS_().cyan, data['etcd_disk_commit_spill_duration_seconds_p50'], { area: true }),
+            makeSeries('Spill P99', COLORS_().orange, data['etcd_disk_commit_spill_duration_seconds_p99']),
+            makeSeries('Write P50', COLORS_().blue, data['etcd_disk_commit_write_duration_seconds_p50'], { area: true }),
+            makeSeries('Write P99', COLORS_().purple, data['etcd_disk_commit_write_duration_seconds_p99'])
+        ]
+    });
+}
+
+function updateMVCCCompaction(data) {
+    const chart = charts['chartMVCCCompaction'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: [
+            { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+            { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatDuration(v) }, splitLine: { show: false } }
+        ],
+        series: [
+            makeSeries('Current Revision', COLORS_().blue, data['etcd_mvcc_current_revision'], { area: true }),
+            makeSeries('Compact Revision', COLORS_().cyan, data['etcd_mvcc_compact_revision']),
+            makeSeries('Compaction Keys', COLORS_().green, data['etcd_mvcc_db_compaction_keys_total']),
+            { ...makeSeries('Compaction Pause P99', COLORS_().red, data['etcd_mvcc_db_compaction_pause_duration_p99']), yAxisIndex: 1 },
+            { ...makeSeries('Compaction Total P99', COLORS_().orange, data['etcd_mvcc_db_compaction_total_duration_p99']), yAxisIndex: 1 }
+        ]
+    });
+}
+
+function updateWatcherEvents(data) {
+    const chart = charts['chartWatcherEvents'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        series: [
+            makeSeries('Events Total', COLORS_().blue, data['etcd_mvcc_events_total'], { area: true }),
+            makeSeries('Pending Events', COLORS_().orange, data['etcd_mvcc_pending_events_total']),
+            makeSeries('Watch Streams', COLORS_().green, data['etcd_mvcc_watch_stream_total']),
+            makeSeries('Watchers', COLORS_().cyan, data['etcd_mvcc_watcher_total']),
+            makeSeries('Slow Watchers', COLORS_().red, data['etcd_mvcc_slow_watcher_total'])
+        ]
+    });
+}
+
+function updateLeaseActivity(data) {
+    const chart = charts['chartLeaseActivity'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        series: [
+            makeSeries('Granted', COLORS_().green, data['etcd_lease_granted_total'], { area: true }),
+            makeSeries('Revoked', COLORS_().orange, data['etcd_lease_revoked_total']),
+            makeSeries('Renewed', COLORS_().blue, data['etcd_lease_renewed_total']),
+            makeSeries('Expired', COLORS_().red, data['etcd_lease_expired_total'])
+        ]
+    });
+}
+
+function updateActivePeersGRPC(data) {
+    const chart = charts['chartActivePeersGRPC'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        series: [
+            makeSeries('Active Peers', COLORS_().green, data['etcd_network_active_peers'], { area: true }),
+            makeSeries('gRPC Msg Received', COLORS_().blue, data['grpc_server_msg_received_total']),
+            makeSeries('gRPC Msg Sent', COLORS_().cyan, data['grpc_server_msg_sent_total'])
+        ]
+    });
+}
+
 // === Data Fetching ===
 
 // getAuthHeaders 获取认证请求头
@@ -983,7 +1145,35 @@ const ALL_RANGE_METRICS = [
     // Runtime
     'process_resident_memory_bytes', 'go_memstats_alloc_bytes', 'go_memstats_sys_bytes', 'go_goroutines',
     'process_cpu_seconds_total', 'process_cpu_usage_percent', 'process_open_fds',
-    'go_gc_duration_seconds_q050', 'go_gc_duration_seconds_q075', 'go_gc_duration_seconds_q1'
+    'go_gc_duration_seconds_q050', 'go_gc_duration_seconds_q075', 'go_gc_duration_seconds_q1',
+    // === Extended: Server ===
+    'etcd_server_quota_backend_bytes', 'etcd_server_heartbeat_send_failures_total',
+    'etcd_server_read_indexes_failed_total',
+    'etcd_server_client_requests_total', 'etcd_server_client_requests_v35',
+    'etcd_server_client_requests_v34', 'etcd_server_client_requests_unknown',
+    'etcd_server_health_failures', 'etcd_server_health_success',
+    // === Extended: Disk ===
+    'etcd_disk_backend_defrag_duration_seconds_p50', 'etcd_disk_backend_defrag_duration_seconds_p90', 'etcd_disk_backend_defrag_duration_seconds_p99',
+    'etcd_disk_backend_snapshot_duration_seconds_p50', 'etcd_disk_backend_snapshot_duration_seconds_p90', 'etcd_disk_backend_snapshot_duration_seconds_p99',
+    'etcd_disk_wal_write_bytes_total',
+    'etcd_snap_db_fsync_duration_seconds_p50', 'etcd_snap_db_fsync_duration_seconds_p90', 'etcd_snap_db_fsync_duration_seconds_p99',
+    'etcd_snap_db_save_total_duration_seconds_p50', 'etcd_snap_db_save_total_duration_seconds_p90', 'etcd_snap_db_save_total_duration_seconds_p99',
+    'etcd_disk_commit_rebalance_duration_seconds_p50', 'etcd_disk_commit_rebalance_duration_seconds_p90', 'etcd_disk_commit_rebalance_duration_seconds_p99',
+    'etcd_disk_commit_spill_duration_seconds_p50', 'etcd_disk_commit_spill_duration_seconds_p90', 'etcd_disk_commit_spill_duration_seconds_p99',
+    'etcd_disk_commit_write_duration_seconds_p50', 'etcd_disk_commit_write_duration_seconds_p90', 'etcd_disk_commit_write_duration_seconds_p99',
+    // === Extended: MVCC ===
+    'etcd_mvcc_compact_revision', 'etcd_mvcc_current_revision',
+    'etcd_mvcc_events_total', 'etcd_mvcc_pending_events_total', 'etcd_mvcc_total_put_size_in_bytes',
+    'etcd_mvcc_db_compaction_keys_total',
+    'etcd_mvcc_db_compaction_pause_duration_p50', 'etcd_mvcc_db_compaction_pause_duration_p90', 'etcd_mvcc_db_compaction_pause_duration_p99',
+    'etcd_mvcc_db_compaction_total_duration_p50', 'etcd_mvcc_db_compaction_total_duration_p90', 'etcd_mvcc_db_compaction_total_duration_p99',
+    'etcd_mvcc_hash_duration_seconds_p50', 'etcd_mvcc_hash_duration_seconds_p90', 'etcd_mvcc_hash_duration_seconds_p99',
+    'etcd_mvcc_hash_rev_duration_seconds_p50', 'etcd_mvcc_hash_rev_duration_seconds_p90', 'etcd_mvcc_hash_rev_duration_seconds_p99',
+    'etcd_mvcc_watch_stream_total', 'etcd_mvcc_watcher_total', 'etcd_mvcc_slow_watcher_total',
+    // === Extended: Lease ===
+    'etcd_lease_granted_total', 'etcd_lease_revoked_total', 'etcd_lease_renewed_total', 'etcd_lease_expired_total',
+    // === Extended: Network/gRPC ===
+    'etcd_network_active_peers', 'grpc_server_msg_received_total', 'grpc_server_msg_sent_total'
 ];
 
 // === Main Refresh ===
@@ -1038,6 +1228,15 @@ async function refresh() {
     updateGC(rangeData);
     updateFDs(rangeData);
     updateMemSys(rangeData);
+
+    // Extended charts
+    updateServerHealth(rangeData);
+    updateSnapshotDefrag(rangeData);
+    updateBackendBreakdown(rangeData);
+    updateMVCCCompaction(rangeData);
+    updateWatcherEvents(rangeData);
+    updateLeaseActivity(rangeData);
+    updateActivePeersGRPC(rangeData);
 
     // Hide loading
     document.getElementById('loading').classList.add('hidden');
@@ -1251,7 +1450,7 @@ function buildPanelConfigList() {
     if (!_panelConfigDraft || !_panelConfigDraft.panels) return;
 
     // 按分区分组
-    var sectionOrder = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    var sectionOrder = ['raft', 'disk', 'storage', 'lease', 'network', 'grpc', 'runtime'];
     var grouped = {};
     sectionOrder.forEach(function(s) { grouped[s] = []; });
 
@@ -1404,7 +1603,7 @@ async function savePanelConfigUI() {
     if (!_panelConfigDraft) return;
 
     // Collect final state from DOM (checkbox states + order)
-    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime'];
+    var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime', 'lease'];
     var globalOrder = 0;
     sections.forEach(function(section) {
         var sectionDiv = document.querySelector('[data-config-section="' + section + '"]');
