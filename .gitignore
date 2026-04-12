@@ -28,8 +28,7 @@ data/
 logs/
 #certs/*.key
 #certs/*.crt
-etcdmonitor
-etcdmonitor-linux-amd64
+/etcdmonitor
 *.db
 *.log
 
