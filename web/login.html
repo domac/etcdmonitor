@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>etcd Monitor - Login</title>
+    <link rel="icon" type="image/svg+xml" href="etcd-icon.svg">
     <link rel="stylesheet" href="style.css">
     <style>
         .login-page {
@@ -28,14 +29,9 @@
         .login-logo {
             width: 48px;
             height: 48px;
-            background: var(--accent-blue);
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 22px;
-            color: #fff;
+            object-fit: contain;
+            display: block;
             margin: 0 auto 16px;
         }
 
@@ -156,7 +152,7 @@
 </head>
 <body class="login-page">
     <div class="login-card">
-        <div class="login-logo">E</div>
+        <img class="login-logo" src="etcd-icon.svg" alt="etcd">
         <div class="login-title">etcd Monitor</div>
         <div class="login-subtitle">请输入 etcd 凭据以访问监控大盘</div>
 
