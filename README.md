@@ -21,7 +21,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 - **Zero dependencies** - Single static binary (~10MB), embeds web UI, SQLite storage, everything
 - **Multi-member cluster** - Auto-discovers all etcd members via `etcdctl`, concurrent metrics collection
-- **50+ metrics, 18 charts** - Covers Raft, disk I/O, MVCC, network, gRPC, Go runtime
+- **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
 - **Dark / Light theme** - Toggle with one click, preference saved in browser
@@ -164,16 +164,23 @@ log:
 | Commit-Apply Lag | Red when > 50 |
 | Proposal Failed Rate | Red when > 0/s |
 
-### Chart Panels (18 charts)
+### Chart Panels (25 charts, 18 default + 7 extended)
 
 | Section | Charts | Key Metrics |
 |---|---|---|
 | **Raft & Server** | Proposals, Leader Changes, Commit-Apply Lag, Failed Rate | `proposals_*`, `leader_changes`, `slow_apply` |
+| **Raft & Server** *(ext)* | Server Health & Quota | `quota_backend_bytes`, `heartbeat_send_failures`, `health_*`, `client_requests` by API version |
 | **Disk Performance** | WAL Fsync Duration, Backend Commit Duration | P50/P90/P99 latency histograms |
+| **Disk Performance** *(ext)* | Snapshot & Defrag Duration, Backend Commit Breakdown | `defrag`/`snapshot`/`snap_db` latency, commit sub-phase `rebalance`/`spill`/`write` P50/P90/P99 |
 | **MVCC & Storage** | Database Size, MVCC Operations | `db_total_size`, `put/delete/txn/range` totals |
+| **MVCC & Storage** *(ext)* | MVCC Revisions & Compaction, Watcher & Events | `compact/current_revision`, `compaction_keys/duration`, `events_total`, `pending_events`, `watch_stream`, `slow_watcher` |
+| **Lease Management** *(ext)* | Lease Activity | `lease_granted/revoked/renewed/expired` totals |
 | **Network & Peers** | Peer Traffic, Peer RTT | `peer_sent/received_bytes`, RTT P50/P90/P99 |
+| **Network & Peers** *(ext)* | Active Peers & gRPC Messages | `network_active_peers`, `grpc_server_msg_sent/received` |
 | **gRPC Requests** | Request Rate, Client Traffic | `grpc_server_handled` (OK/Error), traffic bytes |
 | **Process & Runtime** | CPU Usage, Memory, Goroutines, GC Duration, File Descriptors, Memory Sys | CPU %, RSS, heap, GC pause, FDs, sys memory |
+
+> Panels marked *(ext)* are **hidden by default**. Enable them via the gear button (⚙) in the dashboard header.
 
 ## HTTPS / TLS
 
