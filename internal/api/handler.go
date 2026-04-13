@@ -157,6 +157,7 @@ func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"status":            "running",
 		"collector_up":      collectorUp,
 		"etcd_endpoint":     a.cfg.Etcd.Endpoint,
+		"etcd_version":      a.collector.GetVersion(),
 		"collect_interval":  a.cfg.Collector.Interval,
 		"retention_days":    a.cfg.Storage.RetentionDays,
 		"members":           members,

@@ -364,6 +364,7 @@ body {
     flex-shrink: 0;
 }
 
+.key-metric-icon.ver { background: linear-gradient(135deg, #419eda, #2d7ab6); }
 .key-metric-icon.cpu { background: linear-gradient(135deg, #f85149, #da3633); }
 .key-metric-icon.mem { background: linear-gradient(135deg, #bc8cff, #8957e5); }
 .key-metric-icon.db { background: linear-gradient(135deg, #58a6ff, #388bfd); }

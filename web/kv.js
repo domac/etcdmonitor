@@ -481,30 +481,44 @@ async function kvSelectNode(node) {
     kvState.selectedKey = node.key;
     kvState.selectedNode = node;
 
-    // Update tree UI
-    document.querySelectorAll('.kv-tree-row.selected').forEach(function(el) {
+    // Update tree UI — highlight selected row (both tree and list mode)
+    document.querySelectorAll('.kv-tree-row.selected, .kv-list-row.selected').forEach(function(el) {
         el.classList.remove('selected');
     });
-    var rows = document.querySelectorAll('.kv-tree-row');
-    rows.forEach(function(r) {
-        var wrapper = r.parentElement;
-        if (wrapper && wrapper.dataset.key === node.key) {
-            r.classList.add('selected');
+    document.querySelectorAll('.kv-tree-node').forEach(function(wrapper) {
+        if (wrapper.dataset.key === node.key) {
+            var row = wrapper.querySelector('.kv-tree-row, .kv-list-row');
+            if (row) row.classList.add('selected');
         }
     });
 
     if (node.dir) {
         // Directory node — refresh children from etcd (handles TTL expiry)
-        if (node._expanded) {
+        // Tree 模式下已展开的目录刷新子节点；List 模式不需要刷新子树
+        if (node._expanded && kvState.treeMode === 'tree') {
             await kvRefreshChildren(node);
             kvRenderTree();
             // Re-highlight selected row after re-render
-            document.querySelectorAll('.kv-tree-row').forEach(function(r) {
-                var wrapper = r.parentElement;
-                if (wrapper && wrapper.dataset.key === node.key) {
-                    r.classList.add('selected');
+            document.querySelectorAll('.kv-tree-node').forEach(function(wrapper) {
+                if (wrapper.dataset.key === node.key) {
+                    var row = wrapper.querySelector('.kv-tree-row');
+                    if (row) row.classList.add('selected');
                 }
             });
+        }
+
+        // 始终 fetch 目录自身最新的 TTL/value（无论 Tree 还是 List 模式）
+        try {
+            var resp = await kvFetch(kvApiBase() + '/get?key=' + encodeURIComponent(node.key));
+            if (!resp.error && resp.node) {
+                node.value = resp.node.value;
+                node.ttl = resp.node.ttl;
+                node.createdIndex = resp.node.createdIndex;
+                node.modifiedIndex = resp.node.modifiedIndex;
+                node.version = resp.node.version;
+            }
+        } catch (e) {
+            // virtual dir, ignore
         }
 
         kvShowKeyInfo(node);

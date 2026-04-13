@@ -1196,6 +1196,9 @@ async function refresh() {
         statusText.textContent = 'Disconnected';
     }
 
+    // Update etcd version
+    document.getElementById('bannerVersion').textContent = (status && status.etcd_version) ? status.etcd_version : '-';
+
     // Update members
     if (status && status.members) {
         updateMemberSelect(status.members, status.default_member_id);

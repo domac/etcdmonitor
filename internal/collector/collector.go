@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"sync"
@@ -133,6 +134,21 @@ func (c *Collector) GetDefaultMemberID() string {
 		return c.members[0].ID
 	}
 	return ""
+}
+
+// GetVersion 获取 etcd 集群版本号
+func (c *Collector) GetVersion() string {
+	if c.etcdClient == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.etcdClient.Status(ctx, c.cfg.Etcd.Endpoint)
+	if err != nil {
+		return ""
+	}
+	return resp.Version
 }
 
 // memberSnapshot 一次采集的结果
