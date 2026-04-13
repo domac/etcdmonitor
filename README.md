@@ -19,8 +19,8 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 ## Features
 
-- **Zero dependencies** - Single static binary (~10MB), embeds web UI, SQLite storage, everything
-- **Multi-member cluster** - Auto-discovers all etcd members via `etcdctl`, concurrent metrics collection
+- **Zero dependencies** - Single static binary (~31MB), embeds web UI, SQLite storage, everything
+- **Multi-member cluster** - Auto-discovers all etcd members via official Go SDK, concurrent metrics collection
 - **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
@@ -77,8 +77,6 @@ etcd:
   username: ""                              # Collector credentials (leave empty if no auth)
   password: ""
   metrics_path: "/metrics"
-  discovery_via_api: false                  # true: gRPC-gateway API, false: etcdctl
-  bin_path: "/data/services/etcd/bin"       # etcdctl path (when discovery_via_api: false)
 
 server:
   listen: ":9090"
@@ -106,8 +104,6 @@ log:
 | `etcd.endpoint` | etcd client endpoint | `http://127.0.0.1:2379` |
 | `etcd.username` | Collector auth username (leave empty if no auth) | - |
 | `etcd.password` | Collector auth password | - |
-| `etcd.discovery_via_api` | Member discovery: `true` = v3 HTTP API, `false` = etcdctl | `false` |
-| `etcd.bin_path` | etcdctl binary directory (when `discovery_via_api: false`) | `/data/services/etcd/bin` |
 | `server.listen` | Dashboard listen address | `:9090` |
 | `server.tls_enable` | Enable HTTPS | `false` |
 | `server.tls_cert` | TLS certificate file path | `certs/server.crt` |
@@ -216,15 +212,9 @@ systemctl restart etcdmonitor
 
 ## Multi-Member Cluster Support
 
-etcd Monitor automatically discovers all cluster members and collects metrics concurrently.
+etcd Monitor automatically discovers all cluster members via the official etcd v3 Go SDK (`clientv3.MemberList()`) and collects metrics concurrently.
 
-**Member discovery modes:**
-
-| Mode | Config | How it works | When to use |
-|---|---|---|---|
-| **etcdctl** | `discovery_via_api: false` | Runs `etcdctl member list -w json` | etcd without gRPC-gateway (most 3.4 setups) |
-| **v3 HTTP API** | `discovery_via_api: true` | `POST /v3/cluster/member/list` | etcd with gRPC-gateway enabled |
-
+- No external binary dependencies (no `etcdctl` required)
 - Members are refreshed every 60 seconds (handles scaling events)
 - Each member's metrics are stored with its own `member_id` in SQLite
 - Dashboard header has a dropdown to switch between members
@@ -303,7 +293,7 @@ etcdmonitor/
 │   ├── config/config.go        # Configuration loading & defaults
 │   ├── collector/
 │   │   ├── collector.go        # Concurrent metrics collection engine
-│   │   ├── member.go           # Cluster member discovery (etcdctl / API)
+│   │   ├── member.go           # Cluster member discovery (etcd v3 SDK)
 │   │   └── parser.go           # Prometheus text format parser
 │   ├── storage/storage.go      # SQLite time-series storage with downsampling
 │   ├── auth/
@@ -355,7 +345,7 @@ etcdmonitor/
 |---|---|
 | OS | Linux x86_64 (CentOS 7/8, RHEL, Ubuntu, etc.) |
 | etcd | 3.4.x (verified on 3.4.18) |
-| Runtime | **None** - statically linked binary, no Go/Node/Python needed |
+| Runtime | **None** - statically linked binary, no Go/Node/Python/etcdctl needed |
 | Disk | ~250MB (10MB binary + ~200MB for 7 days of data) |
 
 ## Contributing

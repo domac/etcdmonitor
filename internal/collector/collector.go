@@ -9,13 +9,16 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/storage"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Collector 负责从 etcd /metrics 端点采集 Prometheus 格式的指标
 type Collector struct {
-	cfg     *config.Config
-	store   *storage.Storage
-	client  *http.Client
+	cfg        *config.Config
+	store      *storage.Storage
+	client     *http.Client
+	etcdClient *clientv3.Client
 
 	mu             sync.RWMutex
 	members        []MemberInfo
@@ -30,9 +33,25 @@ type Collector struct {
 
 // New 创建采集器实例
 func New(cfg *config.Config, store *storage.Storage) *Collector {
+	// 创建 etcd v3 SDK 客户端用于成员发现
+	etcdCfg := clientv3.Config{
+		Endpoints:   []string{cfg.Etcd.Endpoint},
+		DialTimeout: 5 * time.Second,
+	}
+	if cfg.Etcd.Username != "" {
+		etcdCfg.Username = cfg.Etcd.Username
+		etcdCfg.Password = cfg.Etcd.Password
+	}
+
+	etcdClient, err := clientv3.New(etcdCfg)
+	if err != nil {
+		logger.Errorf("[Collector] Failed to create etcd SDK client: %v, member discovery may fail", err)
+	}
+
 	return &Collector{
-		cfg:   cfg,
-		store: store,
+		cfg:        cfg,
+		store:      store,
+		etcdClient: etcdClient,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -68,6 +87,9 @@ func (c *Collector) Start() {
 func (c *Collector) Stop() {
 	c.stopOnce.Do(func() {
 		close(c.stop)
+		if c.etcdClient != nil {
+			c.etcdClient.Close()
+		}
 	})
 }
 

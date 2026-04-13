@@ -8,11 +8,6 @@ etcd:
   password: ""
   # metrics 路径
   metrics_path: "/metrics"
-  # 成员发现方式：true = 通过 etcd v3 HTTP API（需开启 gRPC-gateway）
-  #              false = 通过 etcdctl 命令（不依赖 gRPC-gateway）
-  discovery_via_api: false
-  # etcdctl 所在目录（discovery_via_api: false 时使用）
-  bin_path: "/data/services/etcd/bin"
 
 server:
   # 监控面板监听地址

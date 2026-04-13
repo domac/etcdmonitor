@@ -15,9 +15,6 @@ type Config struct {
 		Username        string `yaml:"username"`
 		Password        string `yaml:"password"`
 		MetricsPath     string `yaml:"metrics_path"`
-		DiscoveryViaAPI *bool  `yaml:"discovery_via_api"`
-		AuthEnable      *bool  `yaml:"auth_enable"` // 已弃用，兼容旧配置
-		BinPath         string `yaml:"bin_path"`
 	} `yaml:"etcd"`
 
 	Server struct {
@@ -74,24 +71,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Etcd.MetricsPath == "" {
 		cfg.Etcd.MetricsPath = "/metrics"
-	}
-	if cfg.Etcd.AuthEnable == nil {
-		defaultTrue := true
-		cfg.Etcd.AuthEnable = &defaultTrue
-	}
-	// 兼容旧字段名：auth_enable → discovery_via_api
-	if cfg.Etcd.DiscoveryViaAPI == nil {
-		if cfg.Etcd.AuthEnable != nil {
-			// 使用旧字段值，输出弃用提示（日志系统可能尚未初始化，用 fmt）
-			cfg.Etcd.DiscoveryViaAPI = cfg.Etcd.AuthEnable
-			fmt.Println("[WARN] config: 'auth_enable' is deprecated, please use 'discovery_via_api' instead")
-		} else {
-			defaultTrue := true
-			cfg.Etcd.DiscoveryViaAPI = &defaultTrue
-		}
-	}
-	if cfg.Etcd.BinPath == "" {
-		cfg.Etcd.BinPath = "/data/services/etcd/bin"
 	}
 	if cfg.Server.Listen == "" {
 		cfg.Server.Listen = ":9090"
