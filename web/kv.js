@@ -14,7 +14,12 @@ var kvState = {
     initialized: false,        // whether kvInit has been called
     separator: '/',            // key path separator
     contextNode: null,         // node for context menu action
-    deleteTarget: null         // node pending delete confirmation
+    deleteTarget: null,        // node pending delete confirmation
+    // 各协议独立缓存树数据和选中状态
+    cache: {
+        v3: { treeData: null, selectedKey: null, selectedNode: null },
+        v2: { treeData: null, selectedKey: null, selectedNode: null }
+    }
 };
 
 // === API Base ===
@@ -122,6 +127,13 @@ async function kvConnect() {
 // === Protocol Switch ===
 function kvSwitchProtocol(proto) {
     if (kvState.protocol === proto) return;
+
+    // 保存当前协议的树状态到缓存
+    var oldProto = kvState.protocol;
+    kvState.cache[oldProto].treeData = kvState.treeData;
+    kvState.cache[oldProto].selectedKey = kvState.selectedKey;
+    kvState.cache[oldProto].selectedNode = kvState.selectedNode;
+
     kvState.protocol = proto;
 
     // Update toggle UI
@@ -129,11 +141,37 @@ function kvSwitchProtocol(proto) {
     document.getElementById('kvTabV2').classList.toggle('active', proto === 'v2');
     document.getElementById('kvProtoSlider').classList.toggle('right', proto === 'v2');
 
-    // Clear selection
-    kvClearSelection();
-
-    // Reload
-    kvConnect();
+    // 尝试从缓存恢复目标协议的树状态
+    var cached = kvState.cache[proto];
+    if (cached.treeData) {
+        kvState.treeData = cached.treeData;
+        kvState.selectedKey = cached.selectedKey;
+        kvState.selectedNode = cached.selectedNode;
+        kvRenderTree();
+        // 恢复选中状态的右侧面板
+        if (kvState.selectedNode) {
+            kvShowKeyInfo(kvState.selectedNode);
+            if (kvState.selectedNode.value) {
+                kvShowEditor(kvState.selectedNode);
+            } else {
+                kvHideEditor();
+            }
+        } else {
+            kvClearSelection();
+        }
+        // 后台刷新连接信息（Version/Leader/DBSize）
+        kvFetch(kvApiBase() + '/connect', { method: 'POST' }).then(function(resp) {
+            if (!resp.error) {
+                document.getElementById('kvVersion').textContent = resp.version || '-';
+                document.getElementById('kvLeader').textContent = resp.name || '-';
+                document.getElementById('kvDBSize').textContent = resp.size_str || '-';
+            }
+        });
+    } else {
+        // 首次切换到该协议，全量加载
+        kvClearSelection();
+        kvConnect();
+    }
 }
 
 // === Tree Mode Toggle ===
@@ -162,6 +200,7 @@ async function kvLoadTree(key) {
             return;
         }
         kvState.treeData = resp.node;
+        kvState.cache[kvState.protocol].treeData = resp.node;
         kvRenderTree();
     } catch (e) {
         kvShowTreeError('Failed to load: ' + e.message);
