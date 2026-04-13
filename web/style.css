@@ -903,3 +903,477 @@ body {
     border: 1px solid rgba(88, 166, 255, 0.2);
     flex-shrink: 0;
 }
+
+/* ===== Navigation Toggle Button ===== */
+.header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ===== KV Management Section ===== */
+.kv-section {
+    padding: 12px 20px;
+    height: calc(100vh - 70px);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Cluster Info Bar */
+.kv-info-bar {
+    display: flex;
+    gap: 20px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.kv-info-item strong {
+    color: var(--text-primary);
+}
+
+/* KV Layout: Tree + Editor */
+.kv-layout {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Tree Panel */
+.kv-tree-panel {
+    width: 30%;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+/* Resize Handle */
+.kv-resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+}
+.kv-resize-handle:hover,
+.kv-resize-handle.active {
+    background: var(--accent-blue);
+    border-radius: 2px;
+}
+
+/* V2/V3 Tab Bar */
+.kv-tab-bar {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    flex-shrink: 0;
+}
+.kv-tab-spacer {
+    flex: 1;
+}
+
+/* Toggle Switch Group */
+.kv-toggle-group {
+    display: inline-flex;
+}
+.kv-toggle-track {
+    display: flex;
+    position: relative;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    border-radius: 6px;
+    padding: 2px;
+    gap: 0;
+}
+.kv-toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(50% - 2px);
+    height: calc(100% - 4px);
+    background: #419eda;
+    border-radius: 4px;
+    transition: transform 0.2s ease;
+    z-index: 0;
+}
+.kv-toggle-slider.right {
+    transform: translateX(100%);
+}
+.kv-toggle-option {
+    position: relative;
+    z-index: 1;
+    padding: 3px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.2s;
+    white-space: nowrap;
+    border-radius: 4px;
+}
+.kv-toggle-option.active {
+    color: #fff;
+}
+.kv-toggle-option:hover:not(.active) {
+    color: var(--text-primary);
+}
+.kv-toggle-sm .kv-toggle-option {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Tree Container */
+.kv-tree-container {
+    flex: 1;
+    overflow: auto;
+    padding: 4px 0;
+}
+.kv-tree-loading,
+.kv-tree-empty,
+.kv-tree-error {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.kv-tree-error {
+    color: var(--accent-red);
+}
+
+/* Tree Node Styles */
+.kv-tree-node {
+    user-select: none;
+}
+.kv-tree-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: background 0.1s;
+    white-space: nowrap;
+}
+.kv-tree-row:hover {
+    background: rgba(88, 166, 255, 0.08);
+}
+.kv-tree-row.selected {
+    background: rgba(88, 166, 255, 0.15);
+}
+.kv-tree-arrow {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-secondary);
+    transition: transform 0.15s;
+}
+.kv-tree-arrow.expanded {
+    transform: rotate(90deg);
+}
+.kv-tree-arrow.leaf {
+    visibility: hidden;
+}
+.kv-tree-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    flex-shrink: 0;
+    font-size: 12px;
+    text-align: center;
+}
+.kv-tree-icon.dir {
+    color: #419eda;
+}
+.kv-tree-icon.file {
+    color: var(--accent-blue);
+}
+.kv-tree-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.kv-tree-children {
+    padding-left: 16px;
+}
+.kv-tree-children.collapsed {
+    display: none;
+}
+
+/* List Mode Row (flat, no hierarchy) */
+.kv-list-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: background 0.1s;
+    white-space: nowrap;
+}
+.kv-list-row:hover {
+    background: rgba(88, 166, 255, 0.08);
+}
+.kv-list-row.selected {
+    background: rgba(88, 166, 255, 0.15);
+}
+.kv-list-row .kv-tree-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Editor Panel */
+.kv-editor-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* Key Info */
+.kv-key-info {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    flex-shrink: 0;
+}
+.kv-key-path {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+.kv-key-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Editor Toolbar */
+.kv-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    flex-shrink: 0;
+}
+.kv-toolbar-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.kv-toolbar-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+.kv-save-btn {
+    background: var(--accent-blue);
+    color: #fff;
+    border-color: var(--accent-blue);
+}
+.kv-save-btn:hover {
+    opacity: 0.9;
+}
+.kv-mode-select {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    margin-left: auto;
+}
+
+/* Editor Wrap */
+.kv-editor-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+}
+.kv-editor-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+#kvEditor {
+    width: 100%;
+    height: 100%;
+}
+
+/* Context Menu */
+.kv-context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 140px;
+    box-shadow: var(--shadow);
+    z-index: 1000;
+}
+.kv-context-item {
+    padding: 6px 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.kv-context-item:hover {
+    background: rgba(88, 166, 255, 0.1);
+}
+.kv-context-danger {
+    color: var(--accent-red);
+}
+.kv-context-separator {
+    height: 1px;
+    background: var(--border-color, rgba(255,255,255,0.08));
+    margin: 4px 0;
+}
+
+/* Dialogs */
+.kv-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+}
+.kv-dialog {
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    width: 420px;
+    max-width: 90vw;
+    box-shadow: var(--shadow);
+}
+.kv-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+.kv-dialog-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.kv-dialog-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+}
+.kv-dialog-body {
+    padding: 16px;
+}
+.kv-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+.kv-form-group {
+    margin-bottom: 12px;
+}
+.kv-form-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.kv-input,
+.kv-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+.kv-textarea {
+    resize: vertical;
+    font-family: monospace;
+}
+.kv-btn {
+    padding: 6px 16px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.kv-btn-primary {
+    background: var(--accent-blue);
+    color: #fff;
+}
+.kv-btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border-color, rgba(255,255,255,0.15));
+}
+.kv-btn-danger {
+    background: var(--accent-red);
+    color: #fff;
+}
+
+/* Toast */
+.kv-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 20px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+    z-index: 1100;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+}
+.kv-toast.success {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+.kv-toast.error {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}

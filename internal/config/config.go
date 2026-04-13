@@ -47,6 +47,13 @@ type Config struct {
 		Compress  bool   `yaml:"compress"`
 		Console   bool   `yaml:"console"`
 	} `yaml:"log"`
+
+	KVManager struct {
+		Separator      string `yaml:"separator"`
+		ConnectTimeout int    `yaml:"connect_timeout"`
+		RequestTimeout int    `yaml:"request_timeout"`
+		MaxValueSize   int    `yaml:"max_value_size"`
+	} `yaml:"kv_manager"`
 }
 
 // Load 从文件加载配置并填充默认值
@@ -124,6 +131,20 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Log.MaxAge <= 0 {
 		cfg.Log.MaxAge = 30
+	}
+
+	// KVManager 默认值
+	if cfg.KVManager.Separator == "" {
+		cfg.KVManager.Separator = "/"
+	}
+	if cfg.KVManager.ConnectTimeout <= 0 {
+		cfg.KVManager.ConnectTimeout = 5
+	}
+	if cfg.KVManager.RequestTimeout <= 0 {
+		cfg.KVManager.RequestTimeout = 5
+	}
+	if cfg.KVManager.MaxValueSize <= 0 {
+		cfg.KVManager.MaxValueSize = 2 * 1024 * 1024 // 2MB
 	}
 
 	return cfg, nil

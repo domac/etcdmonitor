@@ -37,6 +37,16 @@ storage:
   # 数据保留天数
   retention_days: 7
 
+kv_manager:
+  # Key 路径分隔符
+  separator: "/"
+  # etcd 连接超时（秒）
+  connect_timeout: 5
+  # 单次请求超时（秒）
+  request_timeout: 5
+  # 最大 value 大小（字节），默认 2MB
+  max_value_size: 2097152
+
 log:
   # 日志目录（相对于程序所在目录）
   dir: "logs"

@@ -50,6 +50,16 @@ func (a *API) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/user/panel-config", a.securityHeaders(a.authMiddleware(a.handlePanelConfig)))
 }
 
+// AuthMiddleware 返回认证中间件（供 KV 管理等外部模块使用）
+func (a *API) AuthMiddleware() func(http.HandlerFunc) http.HandlerFunc {
+	return a.authMiddleware
+}
+
+// SecurityHeaders 返回安全头中间件（供 KV 管理等外部模块使用）
+func (a *API) SecurityHeaders() func(http.HandlerFunc) http.HandlerFunc {
+	return a.securityHeaders
+}
+
 // authMiddleware 认证中间件
 // authRequired=false 时直接放行；否则从 Cookie 或 Authorization header 获取 token
 func (a *API) authMiddleware(next http.HandlerFunc) http.HandlerFunc {

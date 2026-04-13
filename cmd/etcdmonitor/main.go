@@ -17,6 +17,7 @@ import (
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/kvmanager"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
@@ -95,6 +96,16 @@ func main() {
 	// 设置 HTTP 路由
 	mux := http.NewServeMux()
 	a.SetupRoutes(mux)
+
+	// 初始化 KV 管理模块
+	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L())
+	if err != nil {
+		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
+	} else {
+		kvHandler.RegisterRoutes(mux, a.AuthMiddleware(), a.SecurityHeaders())
+		defer kvHandler.Close()
+		logger.Info("KV manager initialized")
+	}
 
 	// 静态文件服务（嵌入的 web 目录）
 	webContent, err := fs.Sub(etcdmonitor.WebFS, "web")
