@@ -467,10 +467,9 @@
 
 <!-- Context Menu (for tree nodes) -->
 <div class="kv-context-menu" id="kvContextMenu" style="display:none">
-    <div class="kv-context-item" onclick="kvContextAction('createKey')">New Key</div>
-    <div class="kv-context-item" onclick="kvContextAction('createDir')">New Directory</div>
+    <div class="kv-context-item" onclick="kvContextAction('create')">Create Node</div>
     <div class="kv-context-separator"></div>
-    <div class="kv-context-item kv-context-danger" onclick="kvContextAction('delete')">Delete</div>
+    <div class="kv-context-item kv-context-danger" onclick="kvContextAction('delete')">Remove Node</div>
 </div>
 
 <!-- Create Key Dialog -->
@@ -483,9 +482,10 @@
         <div class="kv-dialog-body">
             <div class="kv-form-group">
                 <label>Key</label>
-                <input type="text" id="kvCreateKey" class="kv-input" placeholder="e.g. /myapp/config">
+                <div class="kv-create-path" id="kvCreatePrefix" title=""></div>
+                <input type="text" id="kvCreateKey" class="kv-input" placeholder="Enter key name" onkeydown="if(event.key==='Enter'){event.preventDefault();kvSubmitCreate()}">
             </div>
-            <div class="kv-form-group">
+            <div class="kv-form-group" id="kvCreateDirGroup">
                 <label><input type="checkbox" id="kvCreateIsDir" onchange="kvToggleDirMode()"> Directory</label>
             </div>
             <div class="kv-form-group">
@@ -498,8 +498,8 @@
             </div>
         </div>
         <div class="kv-dialog-footer">
-            <button class="kv-btn kv-btn-secondary" onclick="kvCloseCreateDialog()">Cancel</button>
-            <button class="kv-btn kv-btn-primary" onclick="kvSubmitCreate()">Create</button>
+            <button class="kv-btn kv-btn-secondary" type="button" onclick="kvCloseCreateDialog()">Cancel</button>
+            <button class="kv-btn kv-btn-primary" type="button" onclick="kvSubmitCreate()">Create</button>
         </div>
     </div>
 </div>
@@ -515,14 +515,14 @@
             <p id="kvDeleteMessage"></p>
         </div>
         <div class="kv-dialog-footer">
-            <button class="kv-btn kv-btn-secondary" onclick="kvCloseDeleteDialog()">Cancel</button>
-            <button class="kv-btn kv-btn-danger" onclick="kvConfirmDelete()">Delete</button>
+            <button class="kv-btn kv-btn-secondary" type="button" onclick="kvCloseDeleteDialog()">Cancel</button>
+            <button class="kv-btn kv-btn-danger" type="button" onclick="kvConfirmDelete()">Delete</button>
         </div>
     </div>
 </div>
 
 <!-- Toast Notification -->
-<div class="kv-toast" id="kvToast" style="display:none"></div>
+<div class="kv-toast" id="kvToast"></div>
 
 <script src="app.js"></script>
 <script src="kv.js"></script>

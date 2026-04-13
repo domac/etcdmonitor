@@ -28,7 +28,7 @@ func (c *Collector) discoverMembers() []MemberInfo {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	resp, err := c.etcdClient.MemberList(ctx)
@@ -99,7 +99,7 @@ func (c *Collector) getLocalMemberID() string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	resp, err := c.etcdClient.Status(ctx, c.cfg.Etcd.Endpoint)

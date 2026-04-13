@@ -207,6 +207,16 @@ function kvAddChild(parentNode, childNode) {
     parentNode.dir = true;
 }
 
+// 移除已过期（TTL 到期）的节点，清除选中状态并刷新树
+function kvRemoveExpiredNode(node) {
+    kvShowToast('Key expired (TTL): ' + node.key, 'error');
+    if (kvState.selectedKey === node.key) {
+        kvClearSelection();
+    }
+    kvRemoveNode(kvState.treeData, node.key);
+    kvRenderTree();
+}
+
 // === Tree Rendering (Data-Driven) ===
 function kvRenderTree() {
     var container = document.getElementById('kvTree');
@@ -373,26 +383,58 @@ async function kvToggleExpand(node, wrapperEl) {
     if (node._expanded) {
         // Collapse
         node._expanded = false;
-        kvRenderTree(); // Re-render full tree
+        kvRenderTree();
         return;
     }
 
-    // Expand - load children if not loaded
-    if (!node._loaded) {
-        try {
-            var resp = await kvFetch(kvApiBase() + '/getpath?key=' + encodeURIComponent(node.key));
-            if (resp.node && resp.node.nodes) {
-                node.nodes = resp.node.nodes;
-            }
-            node._loaded = true;
-        } catch (e) {
-            kvShowToast('Failed to load: ' + e.message, 'error');
-            return;
-        }
-    }
-
+    // Expand — always fetch fresh children from etcd (like etcdkeeper)
+    await kvRefreshChildren(node);
     node._expanded = true;
     kvRenderTree();
+}
+
+// 从 etcd 实时刷新目录节点的子节点
+async function kvRefreshChildren(node) {
+    try {
+        var resp = await kvFetch(kvApiBase() + '/getpath?key=' + encodeURIComponent(node.key));
+        if (resp.error) {
+            kvShowToast('Failed to load: ' + resp.error, 'error');
+            return;
+        }
+        if (resp.node) {
+            // 保留子节点的展开状态
+            var expandedKeys = {};
+            if (node.nodes) {
+                (function collectExpanded(nodes) {
+                    nodes.forEach(function(n) {
+                        if (n._expanded) expandedKeys[n.key] = true;
+                        if (n.nodes) collectExpanded(n.nodes);
+                    });
+                })(node.nodes);
+            }
+
+            // 用新数据替换子节点
+            node.nodes = resp.node.nodes || [];
+
+            // 更新目录本身的元信息（value/TTL/revision）
+            // resp.node 是 getpath 返回的根节点，包含该 key 自身的信息
+            node.value = resp.node.value || '';
+            node.ttl = resp.node.ttl || 0;
+            node.createdIndex = resp.node.createdIndex || node.createdIndex;
+            node.modifiedIndex = resp.node.modifiedIndex || node.modifiedIndex;
+            node.version = resp.node.version || node.version;
+
+            // 恢复子节点展开状态
+            (function restoreExpanded(nodes) {
+                nodes.forEach(function(n) {
+                    if (expandedKeys[n.key]) n._expanded = true;
+                    if (n.nodes) restoreExpanded(n.nodes);
+                });
+            })(node.nodes);
+        }
+    } catch (e) {
+        kvShowToast('Failed to load: ' + e.message, 'error');
+    }
 }
 
 // === Node Selection ===
@@ -413,19 +455,17 @@ async function kvSelectNode(node) {
     });
 
     if (node.dir) {
-        // Directory node — always fetch latest data (TTL is realtime)
-        try {
-            var resp = await kvFetch(kvApiBase() + '/get?key=' + encodeURIComponent(node.key));
-            if (!resp.error && resp.node) {
-                var n = resp.node;
-                node.value = n.value;
-                node.ttl = n.ttl;
-                node.createdIndex = n.createdIndex;
-                node.modifiedIndex = n.modifiedIndex;
-                node.version = n.version;
-            }
-        } catch (e) {
-            // Key may not exist as a real key (virtual directory), ignore
+        // Directory node — refresh children from etcd (handles TTL expiry)
+        if (node._expanded) {
+            await kvRefreshChildren(node);
+            kvRenderTree();
+            // Re-highlight selected row after re-render
+            document.querySelectorAll('.kv-tree-row').forEach(function(r) {
+                var wrapper = r.parentElement;
+                if (wrapper && wrapper.dataset.key === node.key) {
+                    r.classList.add('selected');
+                }
+            });
         }
 
         kvShowKeyInfo(node);
@@ -441,6 +481,11 @@ async function kvSelectNode(node) {
     try {
         var resp = await kvFetch(kvApiBase() + '/get?key=' + encodeURIComponent(node.key));
         if (resp.error) {
+            if (resp.code === 'key_not_found') {
+                // Key expired (TTL), remove from tree
+                kvRemoveExpiredNode(node);
+                return;
+            }
             kvShowToast(resp.error, 'error');
             return;
         }
@@ -624,7 +669,7 @@ if (_origToggleTheme) {
 
 // === CRUD: Save Value ===
 async function kvSaveValue() {
-    if (!kvState.selectedNode || kvState.selectedNode.dir) return;
+    if (!kvState.selectedNode) return;
     if (!kvState.aceEditor) return;
 
     var value = kvState.aceEditor.getValue();
@@ -661,12 +706,27 @@ async function kvSaveValue() {
 // === CRUD: Create Key ===
 function kvOpenCreateDialog(parentKey, isDir) {
     document.getElementById('kvCreateDialog').style.display = '';
-    document.getElementById('kvCreateDialogTitle').textContent = isDir ? 'New Directory' : 'New Key';
-    document.getElementById('kvCreateKey').value = parentKey ? (parentKey === kvState.separator ? parentKey : parentKey + kvState.separator) : kvState.separator;
+    document.getElementById('kvCreateDialogTitle').textContent = 'Create Node';
+
+    // 显示父路径为不可编辑前缀，用户只需输入名称
+    var prefix = parentKey || kvState.separator;
+    if (prefix !== kvState.separator && !prefix.endsWith(kvState.separator)) {
+        prefix = prefix + kvState.separator;
+    }
+    document.getElementById('kvCreatePrefix').textContent = prefix;
+    document.getElementById('kvCreatePrefix').title = prefix;
+    document.getElementById('kvCreateKey').value = '';
+
+    // Dir 选项始终显示（对齐 etcdkeeper：V3 后端虽忽略，但前端保留选项）
+    document.getElementById('kvCreateDirGroup').style.display = '';
     document.getElementById('kvCreateIsDir').checked = isDir || false;
+
     document.getElementById('kvCreateTTL').value = '';
     document.getElementById('kvCreateValue').value = '';
     kvToggleDirMode();
+
+    // 自动聚焦到名称输入框
+    setTimeout(function() { document.getElementById('kvCreateKey').focus(); }, 100);
 }
 
 function kvCloseCreateDialog() {
@@ -675,19 +735,29 @@ function kvCloseCreateDialog() {
 
 function kvToggleDirMode() {
     var isDir = document.getElementById('kvCreateIsDir').checked;
-    document.getElementById('kvCreateValueGroup').style.display = isDir ? 'none' : '';
+    // V3 目录也可以有值，始终显示 Value 输入区域
+    // V2 目录不能有值，勾选 Dir 时隐藏 Value
+    if (kvState.protocol === 'v2') {
+        document.getElementById('kvCreateValueGroup').style.display = isDir ? 'none' : '';
+    } else {
+        document.getElementById('kvCreateValueGroup').style.display = '';
+    }
 }
 
 async function kvSubmitCreate() {
-    var key = document.getElementById('kvCreateKey').value.trim();
+    var name = document.getElementById('kvCreateKey').value.trim();
+    var prefix = document.getElementById('kvCreatePrefix').textContent;
     var isDir = document.getElementById('kvCreateIsDir').checked;
     var ttl = parseInt(document.getElementById('kvCreateTTL').value) || 0;
     var value = document.getElementById('kvCreateValue').value;
 
-    if (!key) {
-        kvShowToast('Key is required', 'error');
+    if (!name) {
+        kvShowToast('Key name is required', 'error');
         return;
     }
+
+    // 拼接完整路径：前缀 + 名称
+    var key = prefix + name;
 
     try {
         var resp = await kvFetch(kvApiBase() + '/put', {
@@ -695,7 +765,7 @@ async function kvSubmitCreate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 key: key,
-                value: isDir ? '' : value,
+                value: value,
                 ttl: ttl,
                 dir: isDir
             })
@@ -710,8 +780,35 @@ async function kvSubmitCreate() {
         }
         kvCloseCreateDialog();
         kvShowToast('Created successfully', 'success');
-        // Reload tree
-        kvLoadTree();
+
+        // 局部更新树：将新节点插入到父节点下，保留展开状态
+        var newNode = resp.node || {
+            key: key,
+            value: isDir ? '' : value,
+            dir: isDir,
+            ttl: ttl
+        };
+        if (isDir) {
+            newNode.dir = true;
+            newNode.nodes = [];
+        }
+
+        // 找到父节点并插入
+        var sep = kvState.separator;
+        var parentKey = key.substring(0, key.lastIndexOf(sep)) || sep;
+        var parentNode = kvFindNode(kvState.treeData, parentKey);
+        if (parentNode) {
+            // 检查是否已存在（避免重复）
+            var existing = kvFindNode(parentNode, key);
+            if (!existing) {
+                kvAddChild(parentNode, newNode);
+            }
+            parentNode._expanded = true;
+            kvRenderTree();
+        } else {
+            // 父节点不在树中（可能未展开），回退到重新加载父节点的子树
+            kvLoadTree();
+        }
     } catch (e) {
         kvShowToast('Create failed: ' + e.message, 'error');
     }
@@ -772,16 +869,23 @@ function kvShowContextMenu(e, node) {
     kvState.contextNode = node;
     var menu = document.getElementById('kvContextMenu');
 
-    // Show/hide items based on node type
+    // 对齐 etcdkeeper 的右键菜单逻辑：
+    // items[0] = Create Node, items[1] = Remove Node
     var items = menu.querySelectorAll('.kv-context-item');
-    // items[0] = New Key, items[1] = New Directory, items[2] = Delete
-    if (node.dir) {
-        items[0].style.display = '';  // New Key
-        items[1].style.display = '';  // New Dir
+    if (kvState.protocol === 'v3') {
+        if (kvState.treeMode === 'tree') {
+            // V3 Tree(Path) 模式：所有节点都显示 Create Node + Remove Node
+            items[0].style.display = '';
+        } else {
+            // V3 List 模式：只有 dir 节点显示 Create Node
+            items[0].style.display = node.dir ? '' : 'none';
+        }
     } else {
-        items[0].style.display = 'none';
-        items[1].style.display = 'none';
+        // V2：只有目录才能创建子节点
+        items[0].style.display = node.dir ? '' : 'none';
     }
+    // Remove Node 始终显示
+    items[1].style.display = '';
 
     menu.style.display = '';
     menu.style.left = e.clientX + 'px';
@@ -803,11 +907,8 @@ function kvContextAction(action) {
     if (!node) return;
 
     switch (action) {
-        case 'createKey':
+        case 'create':
             kvOpenCreateDialog(node.key, false);
-            break;
-        case 'createDir':
-            kvOpenCreateDialog(node.key, true);
             break;
         case 'delete':
             kvOpenDeleteDialog(node);
@@ -852,10 +953,12 @@ function kvShowToast(msg, type) {
     var toast = document.getElementById('kvToast');
     toast.textContent = msg;
     toast.className = 'kv-toast' + (type ? ' ' + type : '');
-    toast.style.display = '';
+    // 触发 reflow 后添加 show 类实现淡入动画
+    void toast.offsetWidth;
+    toast.classList.add('show');
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(function() {
-        toast.style.display = 'none';
+        toast.classList.remove('show');
     }, 3000);
 }
 

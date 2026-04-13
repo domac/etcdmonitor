@@ -120,7 +120,7 @@ func Load(path string) (*Config, error) {
 		cfg.KVManager.ConnectTimeout = 5
 	}
 	if cfg.KVManager.RequestTimeout <= 0 {
-		cfg.KVManager.RequestTimeout = 5
+		cfg.KVManager.RequestTimeout = 30
 	}
 	if cfg.KVManager.MaxValueSize <= 0 {
 		cfg.KVManager.MaxValueSize = 2 * 1024 * 1024 // 2MB
