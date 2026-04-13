@@ -17,6 +17,8 @@ import (
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
+	"etcdmonitor/internal/kvmanager"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
@@ -55,9 +57,18 @@ func main() {
 
 	logger.Infof("Log directory: %s", cfg.Log.Dir)
 	logger.Infof("Log level: %s", cfg.Log.Level)
-	logger.Infof("etcd endpoint: %s", cfg.Etcd.Endpoint)
+	logger.Infof("etcd endpoints: %v", cfg.EtcdEndpoints())
 	logger.Infof("Collect interval: %ds", cfg.Collector.Interval)
 	logger.Infof("Data retention: %d days", cfg.Storage.RetentionDays)
+
+	// 初始化全局健康端点管理器（探测所有地址，全部不可用则退出）
+	healthMgr, err := health.New(cfg)
+	if err != nil {
+		logger.Fatalf("Init health manager: %v", err)
+	}
+	go healthMgr.StartBackgroundCheck()
+	defer healthMgr.Close()
+	logger.Infof("Healthy endpoints: %v", healthMgr.HealthyEndpoints())
 
 	// 初始化存储
 	store, err := storage.New(cfg)
@@ -68,12 +79,12 @@ func main() {
 	logger.Infof("Storage initialized: %s", cfg.Storage.DBPath)
 
 	// 初始化采集器（先于认证检测启动，确保立即采集数据）
-	coll := collector.New(cfg, store)
+	coll := collector.New(cfg, store, healthMgr)
 	go coll.Start()
 	defer coll.Stop()
 
 	// 检测 etcd 认证状态（仅影响 Dashboard 访问控制）
-	dashboardAuthRequired := auth.DetectAuthRequired(cfg)
+	dashboardAuthRequired := auth.DetectAuthRequired(cfg, healthMgr)
 	if dashboardAuthRequired {
 		logger.Infof("Dashboard auth mode: enabled (login required)")
 	} else {
@@ -90,11 +101,21 @@ func main() {
 	logger.Infof("User preferences directory: %s", prefsDir)
 
 	// 初始化 API
-	a := api.New(cfg, store, coll, dashboardAuthRequired, sessionStore, prefsStore)
+	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore)
 
 	// 设置 HTTP 路由
 	mux := http.NewServeMux()
 	a.SetupRoutes(mux)
+
+	// 初始化 KV 管理模块
+	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr)
+	if err != nil {
+		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
+	} else {
+		kvHandler.RegisterRoutes(mux, a.AuthMiddleware(), a.SecurityHeaders())
+		defer kvHandler.Close()
+		logger.Info("KV manager initialized")
+	}
 
 	// 静态文件服务（嵌入的 web 目录）
 	webContent, err := fs.Sub(etcdmonitor.WebFS, "web")

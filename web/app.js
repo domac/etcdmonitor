@@ -1196,6 +1196,9 @@ async function refresh() {
         statusText.textContent = 'Disconnected';
     }
 
+    // Update etcd version
+    document.getElementById('bannerVersion').textContent = (status && status.etcd_version) ? status.etcd_version : '-';
+
     // Update members
     if (status && status.members) {
         updateMemberSelect(status.members, status.default_member_id);
@@ -1736,4 +1739,59 @@ async function logout() {
     }
     sessionStorage.removeItem('etcdmonitor_token');
     window.location.href = '/login.html';
+}
+
+// === View Toggle (Dashboard <-> KV Manager) ===
+let currentView = 'dashboard'; // 'dashboard' or 'kv'
+
+function toggleView() {
+    if (currentView === 'dashboard') {
+        switchToKVView();
+    } else {
+        switchToDashboardView();
+    }
+}
+
+function switchToKVView() {
+    if (currentView === 'kv') return;
+    currentView = 'kv';
+    // Hide dashboard content
+    document.querySelector('.main').style.display = 'none';
+    // Show KV section
+    document.getElementById('kvSection').style.display = '';
+    // Update header toggle
+    document.getElementById('headerViewMonitor').classList.remove('active');
+    document.getElementById('headerViewKV').classList.add('active');
+    document.getElementById('headerViewSlider').classList.add('right');
+    // Hide dashboard-specific controls
+    document.getElementById('timeRange').style.display = 'none';
+    document.getElementById('refreshInterval').style.display = 'none';
+    document.getElementById('refreshBtn').style.display = 'none';
+    document.getElementById('panelConfigBtn').style.display = 'none';
+    document.getElementById('lastUpdate').style.display = 'none';
+    // Initialize KV module if available
+    if (typeof kvInit === 'function') {
+        kvInit();
+    }
+}
+
+function switchToDashboardView() {
+    if (currentView === 'dashboard') return;
+    currentView = 'dashboard';
+    // Show dashboard content
+    document.querySelector('.main').style.display = '';
+    // Hide KV section
+    document.getElementById('kvSection').style.display = 'none';
+    // Update header toggle
+    document.getElementById('headerViewMonitor').classList.add('active');
+    document.getElementById('headerViewKV').classList.remove('active');
+    document.getElementById('headerViewSlider').classList.remove('right');
+    // Show dashboard-specific controls
+    document.getElementById('timeRange').style.display = '';
+    document.getElementById('refreshInterval').style.display = '';
+    document.getElementById('refreshBtn').style.display = '';
+    document.getElementById('panelConfigBtn').style.display = '';
+    document.getElementById('lastUpdate').style.display = '';
+    // Refresh charts (may need resize after being hidden)
+    Object.values(charts).forEach(function(c) { if (c) c.resize(); });
 }

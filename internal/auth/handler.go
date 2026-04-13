@@ -1,23 +1,22 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // HandleLogin 处理登录请求
 // 通过 etcd 验证凭据，成功后创建会话并设置 Cookie
-func HandleLogin(cfg *config.Config, store *MemorySessionStore) http.HandlerFunc {
+func HandleLogin(cfg *config.Config, store *MemorySessionStore, healthMgr *health.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -38,8 +37,8 @@ func HandleLogin(cfg *config.Config, store *MemorySessionStore) http.HandlerFunc
 			return
 		}
 
-		// 通过 etcd 验证凭据
-		if err := verifyCredentials(cfg, req.Username, req.Password); err != nil {
+		// 通过 etcd SDK 验证凭据
+		if err := verifyCredentials(cfg, healthMgr, req.Username, req.Password); err != nil {
 			logger.Warnf("[Auth] Login failed for user %s: %v", req.Username, err)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "用户名或密码错误"})
 			return
@@ -145,85 +144,29 @@ func HandleAuthStatus(store *MemorySessionStore, authRequired bool) http.Handler
 	}
 }
 
-// verifyCredentials 通过 etcd 验证用户凭据
-func verifyCredentials(cfg *config.Config, username, password string) error {
-	if cfg.Etcd.DiscoveryViaAPI != nil && *cfg.Etcd.DiscoveryViaAPI {
-		return verifyViaAPI(cfg, username, password)
+// verifyCredentials 通过 etcd SDK 验证用户凭据
+func verifyCredentials(cfg *config.Config, healthMgr *health.Manager, username, password string) error {
+	etcdCfg := clientv3.Config{
+		Endpoints:   healthMgr.HealthyEndpoints(),
+		DialTimeout: 5 * time.Second,
 	}
-	return verifyViaCtl(cfg, username, password)
-}
 
-// verifyViaAPI 通过 etcd HTTP API 验证凭据
-func verifyViaAPI(cfg *config.Config, username, password string) error {
-	client := &http.Client{Timeout: 5 * time.Second}
-	url := cfg.Etcd.Endpoint + "/v3/auth/authenticate"
-
-	body, err := json.Marshal(map[string]string{
-		"name":     username,
-		"password": password,
-	})
+	client, err := clientv3.New(etcdCfg)
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // drain
-
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-	return errInvalidCredentials
-}
-
-// verifyViaCtl 通过 etcdctl 验证凭据
-func verifyViaCtl(cfg *config.Config, username, password string) error {
-	// 安全检查：凭据中不允许包含 shell 元字符
-	if containsDangerousChars(username) || containsDangerousChars(password) {
-		return errInvalidCredentials
-	}
-
-	etcdctlPath := filepath.Join(cfg.Etcd.BinPath, "etcdctl")
-	args := []string{
-		"user", "list",
-		"--endpoints=" + cfg.Etcd.Endpoint,
-		"--user=" + username + ":" + password,
-	}
-
-	// 10 秒超时防止 etcdctl 挂起
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, etcdctlPath, args...)
-	cmd.Env = append(cmd.Environ(), "ETCDCTL_API=3")
-
-	output, err := cmd.CombinedOutput()
+	_, err = client.Authenticate(ctx, username, password)
 	if err != nil {
-		logger.Warnf("[Auth] etcdctl verify failed for user %s: %s (err: %v)", username, strings.TrimSpace(string(output)), err)
 		return errInvalidCredentials
 	}
-	logger.Infof("[Auth] etcdctl verify succeeded for user %s", username)
-	return nil
-}
 
-// containsDangerousChars 检查字符串中是否含有危险的 shell 元字符
-func containsDangerousChars(s string) bool {
-	dangerous := []string{"$", "`", ";", "|", "&", "<", ">", "(", ")", "\n", "\r"}
-	for _, ch := range dangerous {
-		if strings.Contains(s, ch) {
-			return true
-		}
-	}
-	return false
+	logger.Infof("[Auth] SDK credential verification succeeded for user %s", username)
+	return nil
 }
 
 var errInvalidCredentials = &InvalidCredentialsError{}

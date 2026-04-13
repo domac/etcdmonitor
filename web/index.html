@@ -7,6 +7,10 @@
     <link rel="icon" type="image/svg+xml" href="etcd-icon.svg">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="vendor/ace/ace.js"></script>
+    <script src="vendor/ace/theme-monokai.js"></script>
+    <script src="vendor/ace/theme-chrome.js"></script>
+    <script>ace.config.set('basePath', 'vendor/ace');</script>
 </head>
 <body>
 
@@ -21,7 +25,17 @@
     <div class="header-left">
         <img class="header-logo" src="etcd-icon.svg" alt="etcd">
         <div>
-            <div class="header-title">etcd Monitor</div>
+            <div class="header-title-row">
+                <div class="header-title">etcd Monitor</div>
+                <!-- View Toggle: Monitor / KV -->
+                <div class="kv-toggle-group kv-toggle-sm" id="headerViewToggle">
+                    <div class="kv-toggle-track">
+                        <div class="kv-toggle-slider" id="headerViewSlider"></div>
+                        <button class="kv-toggle-option active" id="headerViewMonitor" onclick="switchToDashboardView()">Monitor</button>
+                        <button class="kv-toggle-option" id="headerViewKV" onclick="switchToKVView()">KV Tree</button>
+                    </div>
+                </div>
+            </div>
             <select class="member-select" id="memberSelect" onchange="onMemberChange()">
                 <option value="">Loading...</option>
             </select>
@@ -62,6 +76,14 @@
 <main class="main">
     <!-- Key Metrics Banner -->
     <div class="key-metrics-banner">
+        <div class="key-metric">
+            <div class="key-metric-icon ver">V</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">Version</div>
+                <div class="key-metric-value" id="bannerVersion">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
         <div class="key-metric">
             <div class="key-metric-icon cpu">C</div>
             <div class="key-metric-info">
@@ -377,7 +399,143 @@
     </div>
 </main>
 
+<!-- KV Management Section (hidden by default) -->
+<section class="kv-section" id="kvSection" style="display:none">
+    <!-- Cluster Info Bar -->
+    <div class="kv-info-bar" id="kvInfoBar">
+        <span class="kv-info-item"><strong>Version:</strong> <span id="kvVersion">-</span></span>
+        <span class="kv-info-item"><strong>Leader:</strong> <span id="kvLeader">-</span></span>
+        <span class="kv-info-item"><strong>DB Size:</strong> <span id="kvDBSize">-</span></span>
+    </div>
+
+    <!-- KV Main Layout: Tree + Editor -->
+    <div class="kv-layout">
+        <!-- Left: Tree Panel -->
+        <div class="kv-tree-panel" id="kvTreePanel">
+            <!-- Toggle Bar -->
+            <div class="kv-tab-bar">
+                <!-- V2/V3 Protocol Toggle -->
+                <div class="kv-toggle-group" id="kvProtoToggle">
+                    <div class="kv-toggle-track">
+                        <div class="kv-toggle-slider" id="kvProtoSlider"></div>
+                        <button class="kv-toggle-option active" id="kvTabV3" onclick="kvSwitchProtocol('v3')">V3</button>
+                        <button class="kv-toggle-option" id="kvTabV2" onclick="kvSwitchProtocol('v2')">V2</button>
+                    </div>
+                </div>
+                <div class="kv-tab-spacer"></div>
+                <!-- Tree/List View Toggle -->
+                <div class="kv-toggle-group kv-toggle-sm" id="kvViewToggle">
+                    <div class="kv-toggle-track">
+                        <div class="kv-toggle-slider" id="kvViewSlider"></div>
+                        <button class="kv-toggle-option active" id="kvViewTree" onclick="kvSwitchTreeMode('tree')">Tree</button>
+                        <button class="kv-toggle-option" id="kvViewList" onclick="kvSwitchTreeMode('list')">List</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Tree Container -->
+            <div class="kv-tree-container" id="kvTreeContainer">
+                <div class="kv-tree-loading" id="kvTreeLoading">Loading...</div>
+                <div class="kv-tree" id="kvTree"></div>
+                <div class="kv-tree-empty" id="kvTreeEmpty" style="display:none">No keys found</div>
+                <div class="kv-tree-error" id="kvTreeError" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="kv-resize-handle" id="kvResizeHandle"></div>
+
+        <!-- Right: Editor Panel -->
+        <div class="kv-editor-panel">
+            <!-- Key Info Bar -->
+            <div class="kv-key-info" id="kvKeyInfo" style="display:none">
+                <div class="kv-key-path" id="kvKeyPath"></div>
+                <div class="kv-key-meta" id="kvKeyMeta"></div>
+            </div>
+            <!-- Editor Toolbar -->
+            <div class="kv-editor-toolbar" id="kvEditorToolbar" style="display:none">
+                <button class="kv-toolbar-btn kv-save-btn" id="kvSaveBtn" onclick="kvSaveValue()" title="Save">Save</button>
+                <button class="kv-toolbar-btn" id="kvFormatBtn" onclick="kvFormatJSON()" title="Format JSON" style="display:none">Format</button>
+                <select class="kv-mode-select" id="kvModeSelect" onchange="kvChangeMode(this.value)">
+                    <option value="text">Text</option>
+                    <option value="json" selected>JSON</option>
+                    <option value="yaml">YAML</option>
+                    <option value="xml">XML</option>
+                    <option value="toml">TOML</option>
+                    <option value="ini">INI</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="lua">Lua</option>
+                </select>
+            </div>
+            <!-- ACE Editor Container -->
+            <div class="kv-editor-wrap" id="kvEditorWrap">
+                <div class="kv-editor-placeholder" id="kvEditorPlaceholder">Select a key to view its value</div>
+                <div id="kvEditor" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Context Menu (for tree nodes) -->
+<div class="kv-context-menu" id="kvContextMenu" style="display:none">
+    <div class="kv-context-item" onclick="kvContextAction('create')">Create Node</div>
+    <div class="kv-context-separator"></div>
+    <div class="kv-context-item kv-context-danger" onclick="kvContextAction('delete')">Remove Node</div>
+</div>
+
+<!-- Create Key Dialog -->
+<div class="kv-dialog-overlay" id="kvCreateDialog" style="display:none" onclick="if(event.target===this)kvCloseCreateDialog()">
+    <div class="kv-dialog">
+        <div class="kv-dialog-header">
+            <span class="kv-dialog-title" id="kvCreateDialogTitle">New Key</span>
+            <button class="kv-dialog-close" onclick="kvCloseCreateDialog()">&times;</button>
+        </div>
+        <div class="kv-dialog-body">
+            <div class="kv-form-group">
+                <label>Key</label>
+                <div class="kv-create-path" id="kvCreatePrefix" title=""></div>
+                <input type="text" id="kvCreateKey" class="kv-input" placeholder="Enter key name" onkeydown="if(event.key==='Enter'){event.preventDefault();kvSubmitCreate()}">
+            </div>
+            <div class="kv-form-group" id="kvCreateDirGroup">
+                <label><input type="checkbox" id="kvCreateIsDir" onchange="kvToggleDirMode()"> Directory</label>
+            </div>
+            <div class="kv-form-group">
+                <label>TTL (seconds, optional)</label>
+                <input type="number" id="kvCreateTTL" class="kv-input" placeholder="0 = no expiry" min="0">
+            </div>
+            <div class="kv-form-group" id="kvCreateValueGroup">
+                <label>Value</label>
+                <textarea id="kvCreateValue" class="kv-textarea" rows="6" placeholder="Enter value..."></textarea>
+            </div>
+        </div>
+        <div class="kv-dialog-footer">
+            <button class="kv-btn kv-btn-secondary" type="button" onclick="kvCloseCreateDialog()">Cancel</button>
+            <button class="kv-btn kv-btn-primary" type="button" onclick="kvSubmitCreate()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirm Dialog -->
+<div class="kv-dialog-overlay" id="kvDeleteDialog" style="display:none" onclick="if(event.target===this)kvCloseDeleteDialog()">
+    <div class="kv-dialog">
+        <div class="kv-dialog-header">
+            <span class="kv-dialog-title">Confirm Delete</span>
+            <button class="kv-dialog-close" onclick="kvCloseDeleteDialog()">&times;</button>
+        </div>
+        <div class="kv-dialog-body">
+            <p id="kvDeleteMessage"></p>
+        </div>
+        <div class="kv-dialog-footer">
+            <button class="kv-btn kv-btn-secondary" type="button" onclick="kvCloseDeleteDialog()">Cancel</button>
+            <button class="kv-btn kv-btn-danger" type="button" onclick="kvConfirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="kv-toast" id="kvToast"></div>
+
 <script src="app.js"></script>
+<script src="kv.js"></script>
 
 <!-- Panel Config Modal -->
 <div class="modal-overlay" id="panelConfigModal" style="display:none" onclick="if(event.target===this)closePanelConfig()">

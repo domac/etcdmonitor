@@ -1,6 +1,8 @@
 # etcdmonitor 配置文件
 etcd:
-  # etcd 端点地址
+  # etcd 端点地址（支持逗号分隔多地址，SDK 内置 failover）
+  # 单地址: "http://127.0.0.1:2379"
+  # 多地址: "http://a:2379,http://b:2379,http://c:2379"
   endpoint: "http://127.0.0.1:2379"
   # 认证用户名（Collector 采集 etcd 指标使用）
   username: ""
@@ -8,11 +10,6 @@ etcd:
   password: ""
   # metrics 路径
   metrics_path: "/metrics"
-  # 成员发现方式：true = 通过 etcd v3 HTTP API（需开启 gRPC-gateway）
-  #              false = 通过 etcdctl 命令（不依赖 gRPC-gateway）
-  discovery_via_api: false
-  # etcdctl 所在目录（discovery_via_api: false 时使用）
-  bin_path: "/data/services/etcd/bin"
 
 server:
   # 监控面板监听地址
@@ -36,6 +33,16 @@ storage:
   db_path: "data/etcdmonitor.db"
   # 数据保留天数
   retention_days: 7
+
+kv_manager:
+  # Key 路径分隔符
+  separator: "/"
+  # etcd 连接超时（秒）
+  connect_timeout: 5
+  # 单次请求超时（秒）
+  request_timeout: 30
+  # 最大 value 大小（字节），默认 2MB
+  max_value_size: 2097152
 
 log:
   # 日志目录（相对于程序所在目录）

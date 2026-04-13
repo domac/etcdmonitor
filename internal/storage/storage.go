@@ -140,7 +140,7 @@ func (s *Storage) migrateSchema() {
 
 // CheckEndpointChange 检查 etcd 地址是否变更，变更则清理所有监控数据
 func (s *Storage) CheckEndpointChange() error {
-	currentEndpoint := config.NormalizeEndpoint(s.cfg.Etcd.Endpoint)
+	currentEndpoint := config.NormalizeEndpoint(s.cfg.EtcdFirstEndpoint())
 
 	var lastEndpoint string
 	err := s.db.QueryRow("SELECT value FROM meta WHERE key = 'etcd_endpoint'").Scan(&lastEndpoint)

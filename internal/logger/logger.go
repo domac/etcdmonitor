@@ -13,6 +13,7 @@ import (
 
 // global sugar logger
 var sugar *zap.SugaredLogger
+var zapLogger *zap.Logger
 
 // Init 根据配置初始化全局 zap logger
 // 底层使用 lumberjack 实现日志滚动切割
@@ -70,7 +71,7 @@ func Init(cfg *config.Config) error {
 	}
 
 	// 创建 logger，附加 caller 信息
-	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	zapLogger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 	sugar = zapLogger.Sugar()
 
 	return nil
@@ -81,6 +82,15 @@ func Sync() {
 	if sugar != nil {
 		_ = sugar.Sync()
 	}
+}
+
+// L 返回底层 *zap.Logger（供需要结构化日志的模块使用）
+func L() *zap.Logger {
+	if zapLogger != nil {
+		return zapLogger
+	}
+	// fallback: 返回一个 nop logger，避免空指针
+	return zap.NewNop()
 }
 
 // IsInitialized 返回 logger 是否已初始化

@@ -8,6 +8,7 @@ import (
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
 )
@@ -17,17 +18,19 @@ type API struct {
 	cfg          *config.Config
 	store        *storage.Storage
 	collector    *collector.Collector
+	healthMgr    *health.Manager
 	authRequired bool
 	sessionStore *auth.MemorySessionStore
 	prefsStore   *prefs.FileStore
 }
 
 // New 创建 API 实例
-func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, authRequired bool, sessionStore *auth.MemorySessionStore, prefsStore *prefs.FileStore) *API {
+func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, healthMgr *health.Manager, authRequired bool, sessionStore *auth.MemorySessionStore, prefsStore *prefs.FileStore) *API {
 	return &API{
 		cfg:          cfg,
 		store:        store,
 		collector:    c,
+		healthMgr:    healthMgr,
 		authRequired: authRequired,
 		sessionStore: sessionStore,
 		prefsStore:   prefsStore,
@@ -37,7 +40,7 @@ func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, aut
 // SetupRoutes 注册路由
 func (a *API) SetupRoutes(mux *http.ServeMux) {
 	// 公开路由（不受认证中间件保护）
-	mux.HandleFunc("/api/auth/login", a.securityHeaders(auth.HandleLogin(a.cfg, a.sessionStore)))
+	mux.HandleFunc("/api/auth/login", a.securityHeaders(auth.HandleLogin(a.cfg, a.sessionStore, a.healthMgr)))
 	mux.HandleFunc("/api/auth/status", a.securityHeaders(auth.HandleAuthStatus(a.sessionStore, a.authRequired)))
 
 	// 受保护路由（认证模式下需要有效会话）
@@ -48,6 +51,16 @@ func (a *API) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/status", a.securityHeaders(a.authMiddleware(a.handleStatus)))
 	mux.HandleFunc("/api/debug", a.securityHeaders(a.authMiddleware(a.handleDebug)))
 	mux.HandleFunc("/api/user/panel-config", a.securityHeaders(a.authMiddleware(a.handlePanelConfig)))
+}
+
+// AuthMiddleware 返回认证中间件（供 KV 管理等外部模块使用）
+func (a *API) AuthMiddleware() func(http.HandlerFunc) http.HandlerFunc {
+	return a.authMiddleware
+}
+
+// SecurityHeaders 返回安全头中间件（供 KV 管理等外部模块使用）
+func (a *API) SecurityHeaders() func(http.HandlerFunc) http.HandlerFunc {
+	return a.securityHeaders
 }
 
 // authMiddleware 认证中间件

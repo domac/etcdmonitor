@@ -15,9 +15,6 @@ type Config struct {
 		Username        string `yaml:"username"`
 		Password        string `yaml:"password"`
 		MetricsPath     string `yaml:"metrics_path"`
-		DiscoveryViaAPI *bool  `yaml:"discovery_via_api"`
-		AuthEnable      *bool  `yaml:"auth_enable"` // 已弃用，兼容旧配置
-		BinPath         string `yaml:"bin_path"`
 	} `yaml:"etcd"`
 
 	Server struct {
@@ -47,6 +44,13 @@ type Config struct {
 		Compress  bool   `yaml:"compress"`
 		Console   bool   `yaml:"console"`
 	} `yaml:"log"`
+
+	KVManager struct {
+		Separator      string `yaml:"separator"`
+		ConnectTimeout int    `yaml:"connect_timeout"`
+		RequestTimeout int    `yaml:"request_timeout"`
+		MaxValueSize   int    `yaml:"max_value_size"`
+	} `yaml:"kv_manager"`
 }
 
 // Load 从文件加载配置并填充默认值
@@ -67,24 +71,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Etcd.MetricsPath == "" {
 		cfg.Etcd.MetricsPath = "/metrics"
-	}
-	if cfg.Etcd.AuthEnable == nil {
-		defaultTrue := true
-		cfg.Etcd.AuthEnable = &defaultTrue
-	}
-	// 兼容旧字段名：auth_enable → discovery_via_api
-	if cfg.Etcd.DiscoveryViaAPI == nil {
-		if cfg.Etcd.AuthEnable != nil {
-			// 使用旧字段值，输出弃用提示（日志系统可能尚未初始化，用 fmt）
-			cfg.Etcd.DiscoveryViaAPI = cfg.Etcd.AuthEnable
-			fmt.Println("[WARN] config: 'auth_enable' is deprecated, please use 'discovery_via_api' instead")
-		} else {
-			defaultTrue := true
-			cfg.Etcd.DiscoveryViaAPI = &defaultTrue
-		}
-	}
-	if cfg.Etcd.BinPath == "" {
-		cfg.Etcd.BinPath = "/data/services/etcd/bin"
 	}
 	if cfg.Server.Listen == "" {
 		cfg.Server.Listen = ":9090"
@@ -126,6 +112,20 @@ func Load(path string) (*Config, error) {
 		cfg.Log.MaxAge = 30
 	}
 
+	// KVManager 默认值
+	if cfg.KVManager.Separator == "" {
+		cfg.KVManager.Separator = "/"
+	}
+	if cfg.KVManager.ConnectTimeout <= 0 {
+		cfg.KVManager.ConnectTimeout = 5
+	}
+	if cfg.KVManager.RequestTimeout <= 0 {
+		cfg.KVManager.RequestTimeout = 30
+	}
+	if cfg.KVManager.MaxValueSize <= 0 {
+		cfg.KVManager.MaxValueSize = 2 * 1024 * 1024 // 2MB
+	}
+
 	return cfg, nil
 }
 
@@ -139,4 +139,26 @@ func NormalizeEndpoint(endpoint string) string {
 		endpoint = "https://" + endpoint[8:]
 	}
 	return endpoint
+}
+
+// EtcdEndpoints 解析 Endpoint 配置为地址列表（支持逗号分隔多地址）
+func (cfg *Config) EtcdEndpoints() []string {
+	parts := strings.Split(cfg.Etcd.Endpoint, ",")
+	var eps []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			eps = append(eps, p)
+		}
+	}
+	if len(eps) == 0 {
+		eps = []string{"http://127.0.0.1:2379"}
+	}
+	return eps
+}
+
+// EtcdFirstEndpoint 返回配置的第一个 etcd 地址（仅用于本地节点匹配等无需连接的场景）
+func (cfg *Config) EtcdFirstEndpoint() string {
+	eps := cfg.EtcdEndpoints()
+	return eps[0]
 }
