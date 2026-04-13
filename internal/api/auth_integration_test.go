@@ -197,7 +197,7 @@ func TestHandleLogin_MissingFields(t *testing.T) {
 	_, store := newTestAPI(true)
 	cfg := &config.Config{}
 
-	handler := auth.HandleLogin(cfg, store)
+	handler := auth.HandleLogin(cfg, store, nil)
 
 	// Empty body
 	req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{}`))
@@ -214,7 +214,7 @@ func TestHandleLogin_MethodNotAllowed(t *testing.T) {
 	_, store := newTestAPI(true)
 	cfg := &config.Config{}
 
-	handler := auth.HandleLogin(cfg, store)
+	handler := auth.HandleLogin(cfg, store, nil)
 
 	req := httptest.NewRequest("GET", "/api/auth/login", nil)
 	w := httptest.NewRecorder()

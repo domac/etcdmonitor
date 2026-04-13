@@ -140,3 +140,25 @@ func NormalizeEndpoint(endpoint string) string {
 	}
 	return endpoint
 }
+
+// EtcdEndpoints 解析 Endpoint 配置为地址列表（支持逗号分隔多地址）
+func (cfg *Config) EtcdEndpoints() []string {
+	parts := strings.Split(cfg.Etcd.Endpoint, ",")
+	var eps []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			eps = append(eps, p)
+		}
+	}
+	if len(eps) == 0 {
+		eps = []string{"http://127.0.0.1:2379"}
+	}
+	return eps
+}
+
+// EtcdFirstEndpoint 返回配置的第一个 etcd 地址（仅用于本地节点匹配等无需连接的场景）
+func (cfg *Config) EtcdFirstEndpoint() string {
+	eps := cfg.EtcdEndpoints()
+	return eps[0]
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -14,13 +15,15 @@ import (
 // ClientV3 封装 etcd v3 客户端操作（per-request 模式，每次操作创建临时连接）
 type ClientV3 struct {
 	cfg       *config.Config
+	healthMgr *health.Manager
 	separator string
 }
 
 // NewClientV3 创建 v3 客户端实例
-func NewClientV3(cfg *config.Config) (*ClientV3, error) {
+func NewClientV3(cfg *config.Config, healthMgr *health.Manager) (*ClientV3, error) {
 	return &ClientV3{
 		cfg:       cfg,
+		healthMgr: healthMgr,
 		separator: cfg.KVManager.Separator,
 	}, nil
 }
@@ -33,7 +36,7 @@ func (c *ClientV3) Close() error {
 // newClient 创建临时 etcd 客户端，调用方负责 defer cli.Close()
 func (c *ClientV3) newClient() (*clientv3.Client, error) {
 	etcdCfg := clientv3.Config{
-		Endpoints:   []string{c.cfg.Etcd.Endpoint},
+		Endpoints:   c.healthMgr.HealthyEndpoints(),
 		DialTimeout: time.Duration(c.cfg.KVManager.ConnectTimeout) * time.Second,
 	}
 	if c.cfg.Etcd.Username != "" {
@@ -59,9 +62,10 @@ func (c *ClientV3) Connect() (*ConnectInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
 	defer cancel()
 
-	statusResp, err := cli.Status(ctx, c.cfg.Etcd.Endpoint)
+	// 通过健康管理器获取 Status
+	statusResp, err := c.healthMgr.StatusFromHealthy(cli)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get status from healthy endpoints: %w", err)
 	}
 
 	memberResp, err := cli.MemberList(ctx)

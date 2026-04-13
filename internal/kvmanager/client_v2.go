@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 
 	clientv2 "go.etcd.io/etcd/client/v2"
 )
@@ -17,14 +18,16 @@ type ClientV2 struct {
 	keysAPI   clientv2.KeysAPI
 	client    clientv2.Client
 	cfg       *config.Config
+	healthMgr *health.Manager
 	separator string
 	available bool // v2 API 是否可用
 }
 
 // NewClientV2 创建 v2 客户端实例
-func NewClientV2(cfg *config.Config) (*ClientV2, error) {
+func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, error) {
 	c := &ClientV2{
 		cfg:       cfg,
+		healthMgr: healthMgr,
 		separator: cfg.KVManager.Separator,
 		available: false,
 	}
@@ -32,7 +35,7 @@ func NewClientV2(cfg *config.Config) (*ClientV2, error) {
 	transport := clientv2.DefaultTransport
 
 	etcdCfg := clientv2.Config{
-		Endpoints:               []string{cfg.Etcd.Endpoint},
+		Endpoints:               healthMgr.HealthyEndpoints(),
 		Transport:               transport,
 		HeaderTimeoutPerRequest: time.Duration(cfg.KVManager.ConnectTimeout) * time.Second,
 	}

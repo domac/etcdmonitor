@@ -8,35 +8,38 @@ import (
 	"strings"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 
 	"go.uber.org/zap"
 )
 
 // KVHandler 提供 KV 管理的 HTTP 接口
 type KVHandler struct {
-	v3     *ClientV3
-	v2     *ClientV2
-	cfg    *config.Config
-	logger *zap.Logger
+	v3        *ClientV3
+	v2        *ClientV2
+	cfg       *config.Config
+	healthMgr *health.Manager
+	logger    *zap.Logger
 }
 
 // NewKVHandler 创建 KVHandler 实例
-func NewKVHandler(cfg *config.Config, logger *zap.Logger) (*KVHandler, error) {
-	v3, err := NewClientV3(cfg)
+func NewKVHandler(cfg *config.Config, logger *zap.Logger, healthMgr *health.Manager) (*KVHandler, error) {
+	v3, err := NewClientV3(cfg, healthMgr)
 	if err != nil {
 		return nil, fmt.Errorf("create v3 client: %w", err)
 	}
 
-	v2, err := NewClientV2(cfg)
+	v2, err := NewClientV2(cfg, healthMgr)
 	if err != nil {
 		logger.Warn("v2 client creation failed, v2 API will be unavailable", zap.Error(err))
 	}
 
 	return &KVHandler{
-		v3:     v3,
-		v2:     v2,
-		cfg:    cfg,
-		logger: logger,
+		v3:        v3,
+		v2:        v2,
+		cfg:       cfg,
+		healthMgr: healthMgr,
+		logger:    logger,
 	}, nil
 }
 

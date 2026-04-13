@@ -42,7 +42,7 @@ func (c *Collector) discoverMembers() []MemberInfo {
 		return nil
 	}
 
-	configEndpoint := config.NormalizeEndpoint(c.cfg.Etcd.Endpoint)
+	configEndpoint := config.NormalizeEndpoint(c.cfg.EtcdFirstEndpoint())
 	isLocalConfig := isLocalAddress(configEndpoint)
 
 	// 如果 config 是本地地址，先查出本机对应的真实 member ID
@@ -84,7 +84,7 @@ func (c *Collector) discoverMembers() []MemberInfo {
 			ClientURLs:      m.ClientURLs,
 			PeerURLs:        m.PeerURLs,
 			Endpoint:        memberEndpoint,
-			CollectEndpoint: func() string { if isDefault { return c.cfg.Etcd.Endpoint }; return memberEndpoint }(),
+			CollectEndpoint: func() string { if isDefault { return c.cfg.EtcdFirstEndpoint() }; return memberEndpoint }(),
 			IsDefault:       isDefault,
 		})
 	}
@@ -99,12 +99,9 @@ func (c *Collector) getLocalMemberID() string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	resp, err := c.etcdClient.Status(ctx, c.cfg.Etcd.Endpoint)
-	if err != nil {
-		logger.Errorf("[Collector] SDK endpoint status failed: %v", err)
+	resp := c.statusFromAnyEndpoint()
+	if resp == nil {
+		logger.Errorf("[Collector] SDK endpoint status failed on all endpoints")
 		return ""
 	}
 

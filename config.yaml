@@ -1,6 +1,8 @@
 # etcdmonitor 配置文件
 etcd:
-  # etcd 端点地址
+  # etcd 端点地址（支持逗号分隔多地址，SDK 内置 failover）
+  # 单地址: "http://127.0.0.1:2379"
+  # 多地址: "http://a:2379,http://b:2379,http://c:2379"
   endpoint: "http://127.0.0.1:2379"
   # 认证用户名（Collector 采集 etcd 指标使用）
   username: ""

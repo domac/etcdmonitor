@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -15,7 +16,7 @@ import (
 
 // HandleLogin 处理登录请求
 // 通过 etcd 验证凭据，成功后创建会话并设置 Cookie
-func HandleLogin(cfg *config.Config, store *MemorySessionStore) http.HandlerFunc {
+func HandleLogin(cfg *config.Config, store *MemorySessionStore, healthMgr *health.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -37,7 +38,7 @@ func HandleLogin(cfg *config.Config, store *MemorySessionStore) http.HandlerFunc
 		}
 
 		// 通过 etcd SDK 验证凭据
-		if err := verifyCredentials(cfg, req.Username, req.Password); err != nil {
+		if err := verifyCredentials(cfg, healthMgr, req.Username, req.Password); err != nil {
 			logger.Warnf("[Auth] Login failed for user %s: %v", req.Username, err)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "用户名或密码错误"})
 			return
@@ -144,9 +145,9 @@ func HandleAuthStatus(store *MemorySessionStore, authRequired bool) http.Handler
 }
 
 // verifyCredentials 通过 etcd SDK 验证用户凭据
-func verifyCredentials(cfg *config.Config, username, password string) error {
+func verifyCredentials(cfg *config.Config, healthMgr *health.Manager, username, password string) error {
 	etcdCfg := clientv3.Config{
-		Endpoints:   []string{cfg.Etcd.Endpoint},
+		Endpoints:   healthMgr.HealthyEndpoints(),
 		DialTimeout: 5 * time.Second,
 	}
 

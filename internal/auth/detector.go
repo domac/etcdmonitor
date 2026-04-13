@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -13,10 +14,10 @@ import (
 
 // DetectAuthRequired 探测 etcd 是否需要认证
 // 返回 true 表示 Dashboard 需要登录，false 表示直接可用
-func DetectAuthRequired(cfg *config.Config) bool {
+func DetectAuthRequired(cfg *config.Config, healthMgr *health.Manager) bool {
 	// 创建无凭据的临时客户端进行检测
 	etcdCfg := clientv3.Config{
-		Endpoints:   []string{cfg.Etcd.Endpoint},
+		Endpoints:   healthMgr.HealthyEndpoints(),
 		DialTimeout: 5 * time.Second,
 	}
 

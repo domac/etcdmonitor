@@ -73,7 +73,7 @@ Edit `config.yaml`:
 
 ```yaml
 etcd:
-  endpoint: "http://127.0.0.1:2379"
+  endpoint: "http://127.0.0.1:2379"         # Supports comma-separated multi-endpoints for failover
   username: ""                              # Collector credentials (leave empty if no auth)
   password: ""
   metrics_path: "/metrics"
@@ -101,7 +101,7 @@ log:
 
 | Parameter | Description | Default |
 |---|---|---|
-| `etcd.endpoint` | etcd client endpoint | `http://127.0.0.1:2379` |
+| `etcd.endpoint` | etcd client endpoint (comma-separated for multi-endpoint failover) | `http://127.0.0.1:2379` |
 | `etcd.username` | Collector auth username (leave empty if no auth) | - |
 | `etcd.password` | Collector auth password | - |
 | `server.listen` | Dashboard listen address | `:9090` |

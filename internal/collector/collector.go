@@ -1,13 +1,13 @@
 package collector
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"etcdmonitor/internal/config"
+	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/storage"
 
@@ -20,6 +20,7 @@ type Collector struct {
 	store      *storage.Storage
 	client     *http.Client
 	etcdClient *clientv3.Client
+	healthMgr  *health.Manager
 
 	mu             sync.RWMutex
 	members        []MemberInfo
@@ -33,10 +34,10 @@ type Collector struct {
 }
 
 // New 创建采集器实例
-func New(cfg *config.Config, store *storage.Storage) *Collector {
+func New(cfg *config.Config, store *storage.Storage, healthMgr *health.Manager) *Collector {
 	// 创建 etcd v3 SDK 客户端用于成员发现
 	etcdCfg := clientv3.Config{
-		Endpoints:   []string{cfg.Etcd.Endpoint},
+		Endpoints:   cfg.EtcdEndpoints(),
 		DialTimeout: 5 * time.Second,
 	}
 	if cfg.Etcd.Username != "" {
@@ -53,6 +54,7 @@ func New(cfg *config.Config, store *storage.Storage) *Collector {
 		cfg:        cfg,
 		store:      store,
 		etcdClient: etcdClient,
+		healthMgr:  healthMgr,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -66,7 +68,7 @@ func New(cfg *config.Config, store *storage.Storage) *Collector {
 // Start 启动定时采集
 func (c *Collector) Start() {
 	interval := time.Duration(c.cfg.Collector.Interval) * time.Second
-	logger.Infof("[Collector] Starting, interval=%v, endpoint=%s", interval, c.cfg.Etcd.Endpoint)
+	logger.Infof("[Collector] Starting, interval=%v, endpoints=%v", interval, c.cfg.EtcdEndpoints())
 
 	c.collect()
 
@@ -141,14 +143,24 @@ func (c *Collector) GetVersion() string {
 	if c.etcdClient == nil {
 		return ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	resp, err := c.etcdClient.Status(ctx, c.cfg.Etcd.Endpoint)
-	if err != nil {
+	resp := c.statusFromAnyEndpoint()
+	if resp == nil {
 		return ""
 	}
 	return resp.Version
+}
+
+// statusFromAnyEndpoint 通过健康管理器获取 Status
+func (c *Collector) statusFromAnyEndpoint() *clientv3.StatusResponse {
+	if c.etcdClient == nil {
+		return nil
+	}
+	resp, err := c.healthMgr.StatusFromHealthy(c.etcdClient)
+	if err != nil {
+		logger.Warnf("[Collector] StatusFromHealthy failed: %v", err)
+		return nil
+	}
+	return resp
 }
 
 // memberSnapshot 一次采集的结果
@@ -183,8 +195,8 @@ func (c *Collector) collect() {
 				c.members = []MemberInfo{{
 					ID:         "default",
 					Name:       "default",
-					ClientURLs: []string{c.cfg.Etcd.Endpoint},
-					Endpoint:   c.cfg.Etcd.Endpoint,
+					ClientURLs: c.cfg.EtcdEndpoints(),
+					Endpoint:   c.cfg.EtcdFirstEndpoint(),
 					IsDefault:  true,
 				}}
 				c.lastMemberSync = time.Now()
