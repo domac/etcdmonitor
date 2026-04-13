@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.5] - 2026-04-13
+
+### Added
+
+- KV Tree 搜索过滤：左侧树面板新增搜索框，实时过滤 key（大小写不敏感子串匹配）
+- Keys-only API：新增 `GET /api/kv/v3/keys` 和 `GET /api/kv/v2/keys` 接口
+
+### Changed
+
+- 首次加载树改用 keys-only API，不再拉取 value，大幅降低首屏加载时间和带宽
+- 展开目录改为纯本地操作（treeData 已含完整子节点），零网络开销，瞬时响应
+- 点击节点时按需调用 `GET /get?key=xxx` 加载最新 value/TTL/revision
+- `client_v3.go` 重构：提取 `getTree()` 内部方法，`keysOnly` 参数复用树构建逻辑
+
+### Fixed
+
+- 修复 V3 虚拟目录（路径前缀无实际 key）点击后返回 key_not_found 导致整个子树被误删的问题
+
 ## [0.5.0] - 2026-04-13
 
 ### Added

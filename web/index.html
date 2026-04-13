@@ -422,7 +422,12 @@
                         <button class="kv-toggle-option" id="kvTabV2" onclick="kvSwitchProtocol('v2')">V2</button>
                     </div>
                 </div>
-                <div class="kv-tab-spacer"></div>
+                <!-- Search Filter -->
+                <div class="kv-search-box" id="kvSearchBox">
+                    <svg class="kv-search-icon" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 3a5.5 5.5 0 014.383 8.823l3.897 3.897a.75.75 0 01-1.06 1.06l-3.897-3.897A5.5 5.5 0 118.5 3zm0 1.5a4 4 0 100 8 4 4 0 000-8z" fill="currentColor"/></svg>
+                    <input type="text" class="kv-search-input" id="kvSearchInput" placeholder="Filter keys..." oninput="kvOnSearchInput(this.value)">
+                    <button class="kv-search-clear" id="kvSearchClear" onclick="kvClearSearch()" style="display:none">&times;</button>
+                </div>
                 <!-- Tree/List View Toggle -->
                 <div class="kv-toggle-group kv-toggle-sm" id="kvViewToggle">
                     <div class="kv-toggle-track">

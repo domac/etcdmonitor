@@ -29,6 +29,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Multi-member cluster** - Auto-discovers all etcd members via official Go SDK, concurrent metrics collection
 - **Multi-endpoint failover** - Comma-separated endpoints with global health management, auto-recovery
 - **KV Tree management** - Browse, create, edit, delete keys with tree/list view, supports etcd v3 & v2
+- **KV Tree search** - Real-time key filtering with hierarchy preservation, 60s background index refresh
 - **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
@@ -262,6 +263,8 @@ Built-in key-value browser and editor, accessible via the **KV Tree** tab in the
 - **List view** - Flat key listing with full paths
 - **Root node** - The `/` root is always visible, right-click to create keys at the top level
 - **CRUD operations** - Create, read, update, delete keys via context menu and editor panel
+- **Key search & filter** - Real-time key filtering in tree panel; case-insensitive substring match; matched directories expand all children; hierarchy preserved; search state resets on protocol switch
+- **Keys-only loading** - Initial tree load and 60s background refresh use keys-only API (no value transfer), values loaded on-demand when clicking a node
 - **ACE Editor** - Syntax highlighting for JSON, YAML, TOML, XML, and more; dark/light theme sync
 - **TTL support** - Set time-to-live on keys; expired keys are automatically detected and removed from tree
 - **Per-request client** - Each KV operation creates a temporary etcd connection (etcdkeeper pattern), no long-lived connections
@@ -400,6 +403,7 @@ etcdmonitor/
 |---|---|---|---|
 | `/api/kv/v3/connect` | POST | Yes | Connect and get cluster info (version, leader, DB size) |
 | `/api/kv/v3/separator` | GET | Yes | Get the key path separator |
+| `/api/kv/v3/keys` | GET | Yes | Get full key tree structure (keys only, no values) |
 | `/api/kv/v3/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
 | `/api/kv/v3/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
 | `/api/kv/v3/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl) |
@@ -411,6 +415,7 @@ etcdmonitor/
 |---|---|---|---|
 | `/api/kv/v2/connect` | POST | Yes | Connect and check v2 API availability |
 | `/api/kv/v2/separator` | GET | Yes | Get the key path separator |
+| `/api/kv/v2/keys` | GET | Yes | Get full key tree structure (keys only, no values) |
 | `/api/kv/v2/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
 | `/api/kv/v2/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
 | `/api/kv/v2/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl, dir) |

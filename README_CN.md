@@ -29,6 +29,7 @@
 - **多成员集群** - 通过官方 Go SDK 自动发现所有 etcd 成员，并发采集指标
 - **多端点故障转移** - 支持逗号分隔的多地址配置，全局健康管理，自动恢复
 - **KV 树管理** - 浏览、创建、编辑、删除键值，支持树形/列表视图，兼容 etcd v3 和 v2
+- **KV 树搜索** - 实时 key 过滤，保留层级关系，60 秒后台索引刷新
 - **80+ 指标，25 个图表** - 覆盖 Raft、磁盘 I/O、MVCC、Lease、网络、gRPC、Go 运行时
 - **Dashboard 登录认证** - 自动检测 etcd 认证状态；启用时需使用 etcd 凭据登录
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
@@ -262,6 +263,8 @@ etcd:
 - **列表视图** - 扁平化键列表，显示完整路径
 - **根节点** - `/` 根节点始终可见，右键可在顶层创建新键
 - **CRUD 操作** - 通过右键菜单和编辑器面板进行创建、读取、更新、删除
+- **Key 搜索过滤** - 树面板实时 key 过滤；大小写不敏感子串匹配；匹配目录时展开全部子节点；保留层级结构；切换协议时自动清空搜索状态
+- **Keys-only 加载** - 首次加载和 60 秒后台刷新使用 keys-only API（不传输 value），点击节点时按需加载 value
 - **ACE 编辑器** - JSON、YAML、TOML、XML 等语法高亮，深色/浅色主题联动
 - **TTL 支持** - 可为键设置过期时间，过期键自动检测并从树中移除
 - **按请求连接** - 每次 KV 操作创建临时 etcd 连接（etcdkeeper 模式），无长连接
@@ -400,6 +403,7 @@ etcdmonitor/
 |---|---|---|---|
 | `/api/kv/v3/connect` | POST | 是 | 连接并获取集群信息（版本、Leader、数据库大小） |
 | `/api/kv/v3/separator` | GET | 是 | 获取路径分隔符 |
+| `/api/kv/v3/keys` | GET | 是 | 获取全量 key 树结构（仅 key，不含 value） |
 | `/api/kv/v3/getpath?key=/` | GET | 是 | 获取指定路径下的键树（递归） |
 | `/api/kv/v3/get?key=/foo` | GET | 是 | 获取单个键的值和元数据 |
 | `/api/kv/v3/put` | PUT | 是 | 创建或更新键（JSON body: key, value, ttl） |
@@ -411,6 +415,7 @@ etcdmonitor/
 |---|---|---|---|
 | `/api/kv/v2/connect` | POST | 是 | 连接并检查 v2 API 可用性 |
 | `/api/kv/v2/separator` | GET | 是 | 获取路径分隔符 |
+| `/api/kv/v2/keys` | GET | 是 | 获取全量 key 树结构（仅 key，不含 value） |
 | `/api/kv/v2/getpath?key=/` | GET | 是 | 获取指定路径下的键树（递归） |
 | `/api/kv/v2/get?key=/foo` | GET | 是 | 获取单个键的值和元数据 |
 | `/api/kv/v2/put` | PUT | 是 | 创建或更新键（JSON body: key, value, ttl, dir） |

@@ -125,6 +125,16 @@ func (c *ClientV3) Get(key string) (*Node, error) {
 
 // GetPath 获取指定路径下的子节点（树结构）
 func (c *ClientV3) GetPath(key string) (*Node, error) {
+	return c.getTree(key, false)
+}
+
+// Keys 获取全量 key 树结构（不含 value），使用 WithKeysOnly() 高效查询
+func (c *ClientV3) Keys() (*Node, error) {
+	return c.getTree(c.separator, true)
+}
+
+// getTree 内部方法：获取 key 树结构，keysOnly=true 时不拉取 value 也不查询 TTL
+func (c *ClientV3) getTree(key string, keysOnly bool) (*Node, error) {
 	cli, err := c.newClient()
 	if err != nil {
 		return nil, err
@@ -139,7 +149,15 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 		prefixKey = ""
 	}
 
-	resp, err := cli.Get(ctx, prefixKey, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	opts := []clientv3.OpOption{
+		clientv3.WithPrefix(),
+		clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend),
+	}
+	if keysOnly {
+		opts = append(opts, clientv3.WithKeysOnly())
+	}
+
+	resp, err := cli.Get(ctx, prefixKey, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -195,8 +213,10 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 		if len(segments) == 0 {
 			root.isRealKey = true
 			root.realKey = kvKey
-			root.value = string(kv.Value)
-			root.ttl = c.getTTLWithClient(cli, kv.Lease)
+			if !keysOnly {
+				root.value = string(kv.Value)
+				root.ttl = c.getTTLWithClient(cli, kv.Lease)
+			}
 			root.createRevision = kv.CreateRevision
 			root.modRevision = kv.ModRevision
 			root.version = kv.Version
@@ -206,8 +226,10 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 		if kvKey == key {
 			root.isRealKey = true
 			root.realKey = kvKey
-			root.value = string(kv.Value)
-			root.ttl = c.getTTLWithClient(cli, kv.Lease)
+			if !keysOnly {
+				root.value = string(kv.Value)
+				root.ttl = c.getTTLWithClient(cli, kv.Lease)
+			}
 			root.createRevision = kv.CreateRevision
 			root.modRevision = kv.ModRevision
 			root.version = kv.Version
@@ -236,8 +258,10 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 
 		current.isRealKey = true
 		current.realKey = kvKey
-		current.value = string(kv.Value)
-		current.ttl = c.getTTLWithClient(cli, kv.Lease)
+		if !keysOnly {
+			current.value = string(kv.Value)
+			current.ttl = c.getTTLWithClient(cli, kv.Lease)
+		}
 		current.createRevision = kv.CreateRevision
 		current.modRevision = kv.ModRevision
 		current.version = kv.Version
