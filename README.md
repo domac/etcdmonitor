@@ -55,7 +55,7 @@ cd etcdmonitor-v0.5.0-linux-amd64
 vim config.yaml
 
 # Install & start
-sudo ./install.sh
+sh install.sh
 ```
 
 Open `http://<server-ip>:9090` in your browser.
@@ -63,7 +63,7 @@ Open `http://<server-ip>:9090` in your browser.
 ### Build from Source
 
 ```bash
-git clone https://github.com/<your-username>/etcdmonitor.git
+git clone https://github.com/domac/etcdmonitor.git
 cd etcdmonitor
 
 # Build for Linux

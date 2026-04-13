@@ -55,7 +55,7 @@ cd etcdmonitor-v0.5.0-linux-amd64
 vim config.yaml
 
 # 安装并启动
-sudo ./install.sh
+sh install.sh
 ```
 
 在浏览器中打开 `http://<服务器IP>:9090`。
@@ -63,7 +63,7 @@ sudo ./install.sh
 ### 从源码构建
 
 ```bash
-git clone https://github.com/<your-username>/etcdmonitor.git
+git clone https://github.com/domac/etcdmonitor.git
 cd etcdmonitor
 
 # 构建 Linux 版本
