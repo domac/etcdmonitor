@@ -59,6 +59,7 @@ func (h *KVHandler) RegisterRoutes(mux *http.ServeMux, authMiddleware func(http.
 	mux.HandleFunc("/api/kv/v3/put", securityHeaders(authMiddleware(h.handleV3Put)))
 	mux.HandleFunc("/api/kv/v3/delete", securityHeaders(authMiddleware(h.handleV3Delete)))
 	mux.HandleFunc("/api/kv/v3/separator", securityHeaders(authMiddleware(h.handleV3Separator)))
+	mux.HandleFunc("/api/kv/v3/keys", securityHeaders(authMiddleware(h.handleV3Keys)))
 
 	// V2 路由
 	mux.HandleFunc("/api/kv/v2/connect", securityHeaders(authMiddleware(h.handleV2Connect)))
@@ -67,6 +68,7 @@ func (h *KVHandler) RegisterRoutes(mux *http.ServeMux, authMiddleware func(http.
 	mux.HandleFunc("/api/kv/v2/put", securityHeaders(authMiddleware(h.handleV2Put)))
 	mux.HandleFunc("/api/kv/v2/delete", securityHeaders(authMiddleware(h.handleV2Delete)))
 	mux.HandleFunc("/api/kv/v2/separator", securityHeaders(authMiddleware(h.handleV2Separator)))
+	mux.HandleFunc("/api/kv/v2/keys", securityHeaders(authMiddleware(h.handleV2Keys)))
 }
 
 // ===== V3 Handlers =====
@@ -187,6 +189,21 @@ func (h *KVHandler) handleV3Separator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, SeparatorResponse{Separator: h.v3.GetSeparator()})
+}
+
+func (h *KVHandler) handleV3Keys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
+		return
+	}
+
+	node, err := h.v3.Keys()
+	if err != nil {
+		h.writeErrorFromEtcd(w, err)
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
 }
 
 // ===== V2 Handlers =====
@@ -333,6 +350,24 @@ func (h *KVHandler) handleV2Separator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, SeparatorResponse{Separator: h.v2.GetSeparator()})
+}
+
+func (h *KVHandler) handleV2Keys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
+		return
+	}
+	if !h.checkV2Available(w) {
+		return
+	}
+
+	node, err := h.v2.Keys()
+	if err != nil {
+		h.writeErrorFromEtcd(w, err)
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
 }
 
 // ===== Helper Methods =====

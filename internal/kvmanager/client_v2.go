@@ -138,6 +138,24 @@ func (c *ClientV2) GetPath(key string) (*Node, error) {
 	return node, nil
 }
 
+// Keys 获取全量 key 树结构（不含 value），递归清空 value 字段
+func (c *ClientV2) Keys() (*Node, error) {
+	node, err := c.GetPath(c.separator)
+	if err != nil {
+		return nil, err
+	}
+	stripValues(node)
+	return node, nil
+}
+
+// stripValues 递归清空节点树中所有的 value 字段
+func stripValues(node *Node) {
+	node.Value = ""
+	for i := range node.Nodes {
+		stripValues(&node.Nodes[i])
+	}
+}
+
 // Put 创建或更新 key
 func (c *ClientV2) Put(key, value string, ttl int64, dir bool) (*Node, error) {
 	if !c.available {

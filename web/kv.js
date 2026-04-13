@@ -20,6 +20,9 @@ var kvState = {
     separator: '/',            // key path separator
     contextNode: null,         // node for context menu action
     deleteTarget: null,        // node pending delete confirmation
+    searchKeyword: '',         // current search filter keyword
+    _expandedSnapshot: null,   // snapshot of _expanded states before search
+    _autoRefreshTimer: null,   // 60s auto-refresh timer ID
     // 各协议独立缓存树数据和选中状态
     cache: {
         v3: { treeData: null, selectedKey: null, selectedNode: null },
@@ -55,6 +58,9 @@ function kvInit() {
 
     // Load initial data
     kvConnect();
+
+    // Start 60s auto-refresh
+    kvStartAutoRefresh();
 }
 
 // === Connect & Cluster Info ===
@@ -145,6 +151,14 @@ function kvSwitchProtocol(proto) {
 
     kvState.protocol = proto;
 
+    // 切换协议时清空搜索状态
+    kvState.searchKeyword = '';
+    kvState._expandedSnapshot = null;
+    var searchInput = document.getElementById('kvSearchInput');
+    if (searchInput) searchInput.value = '';
+    var searchClear = document.getElementById('kvSearchClear');
+    if (searchClear) searchClear.style.display = 'none';
+
     // Update toggle UI
     document.getElementById('kvTabV3').classList.toggle('active', proto === 'v3');
     document.getElementById('kvTabV2').classList.toggle('active', proto === 'v2');
@@ -186,6 +200,9 @@ function kvSwitchProtocol(proto) {
         kvClearSelection();
         kvConnect();
     }
+
+    // 重启自动刷新定时器（新协议）
+    kvStartAutoRefresh();
 }
 
 // === Tree Mode Toggle ===
@@ -202,13 +219,12 @@ function kvSwitchTreeMode(mode) {
 }
 
 // === Tree Data Loading ===
-async function kvLoadTree(key) {
-    key = key || kvState.separator;
+async function kvLoadTree() {
     kvShowTreeLoading(true);
     kvHideTreeError();
 
     try {
-        var resp = await kvFetch(kvApiBase() + '/getpath?key=' + encodeURIComponent(key));
+        var resp = await kvFetch(kvApiBase() + '/keys');
         if (resp.error) {
             kvShowTreeError(resp.error);
             return;
@@ -274,6 +290,9 @@ function kvRemoveExpiredNode(node) {
 function kvRenderTree() {
     var container = document.getElementById('kvTree');
     var emptyEl = document.getElementById('kvTreeEmpty');
+    // 移除旧的 no-match 提示
+    var oldNoMatch = document.getElementById('kvTreeNoMatch');
+    if (oldNoMatch) oldNoMatch.remove();
 
     container.innerHTML = '';
 
@@ -283,8 +302,24 @@ function kvRenderTree() {
     }
     emptyEl.style.display = 'none';
 
+    // 搜索模式下预计算匹配集合
+    var matchSet = null;
+    if (kvState.searchKeyword) {
+        matchSet = new Set();
+        kvBuildMatchSet(kvState.treeData, kvState.searchKeyword, matchSet);
+        // 无匹配结果
+        if (matchSet.size === 0) {
+            var noMatch = document.createElement('div');
+            noMatch.className = 'kv-tree-no-match';
+            noMatch.id = 'kvTreeNoMatch';
+            noMatch.textContent = 'No matching keys found';
+            container.parentElement.appendChild(noMatch);
+            return;
+        }
+    }
+
     if (kvState.treeMode === 'list') {
-        kvRenderListMode(container, kvState.treeData);
+        kvRenderListMode(container, kvState.treeData, matchSet);
     } else {
         // 渲染根节点 "/" 自身，再渲染其子节点
         var rootNode = kvState.treeData;
@@ -292,24 +327,84 @@ function kvRenderTree() {
         if (rootNode._expanded === undefined) {
             rootNode._expanded = true; // 根节点默认展开
         }
-        var rootEl = kvCreateTreeNodeEl(rootNode, 0, false);
+        var rootEl = kvCreateTreeNodeEl(rootNode, 0, false, matchSet);
         container.appendChild(rootEl);
     }
 }
 
-function kvRenderPathMode(container, nodes, depth) {
+// kvBuildMatchSet: 构建匹配节点集合（包含匹配节点自身及其所有祖先的 key）
+// 如果目录自身匹配，则其所有子孙节点也全部纳入
+function kvBuildMatchSet(node, keyword, matchSet) {
+    var lowerKeyword = keyword.toLowerCase();
+    var hasMatch = false;
+
+    // 检查自身是否匹配（最后一段名称）
+    var parts = node.key.split(kvState.separator);
+    var displayName = parts[parts.length - 1] || node.key;
+    var selfMatch = displayName.toLowerCase().indexOf(lowerKeyword) !== -1;
+
+    if (selfMatch && node.dir) {
+        // 目录自身匹配 → 纳入自身及全部子孙
+        kvAddAllDescendants(node, matchSet);
+        return true;
+    }
+
+    if (selfMatch) {
+        hasMatch = true;
+    }
+
+    // 递归检查子节点
+    if (node.nodes) {
+        for (var i = 0; i < node.nodes.length; i++) {
+            if (kvBuildMatchSet(node.nodes[i], keyword, matchSet)) {
+                hasMatch = true;
+            }
+        }
+    }
+
+    if (hasMatch) {
+        matchSet.add(node.key);
+    }
+
+    return hasMatch;
+}
+
+// kvAddAllDescendants: 将节点及其全部子孙加入 matchSet
+function kvAddAllDescendants(node, matchSet) {
+    matchSet.add(node.key);
+    if (node.nodes) {
+        for (var i = 0; i < node.nodes.length; i++) {
+            kvAddAllDescendants(node.nodes[i], matchSet);
+        }
+    }
+}
+
+function kvRenderPathMode(container, nodes, depth, matchSet) {
     if (!nodes) return;
     nodes.forEach(function(node) {
-        var el = kvCreateTreeNodeEl(node, depth, false);
+        // 搜索模式下跳过不匹配的节点
+        if (matchSet && !matchSet.has(node.key)) return;
+        var el = kvCreateTreeNodeEl(node, depth, false, matchSet);
         container.appendChild(el);
     });
 }
 
-function kvRenderListMode(container, root) {
+function kvRenderListMode(container, root, matchSet) {
     // Flatten all real keys (leaves + directories with values) — flat list, no hierarchy
     var items = [];
     function collect(node) {
         if (node.key !== kvState.separator) {
+            // 搜索模式下，只匹配最后一段名称
+            if (matchSet) {
+                var parts = node.key.split(kvState.separator);
+                var displayName = parts[parts.length - 1] || node.key;
+                var lowerKeyword = kvState.searchKeyword.toLowerCase();
+                if (displayName.toLowerCase().indexOf(lowerKeyword) === -1) {
+                    // 不匹配，但仍需递归子节点
+                    if (node.nodes) node.nodes.forEach(collect);
+                    return;
+                }
+            }
             if (!node.dir) {
                 items.push(node);
             } else if (node.value || node.createdIndex || node.modifiedIndex) {
@@ -362,7 +457,14 @@ function kvRenderListMode(container, root) {
     });
 }
 
-function kvCreateTreeNodeEl(node, depth, showFullPath) {
+function kvCreateTreeNodeEl(node, depth, showFullPath, matchSet) {
+    // 搜索模式下，目录节点如果有匹配后代则强制展开
+    var isSearchMode = !!matchSet;
+    var effectiveExpanded = node._expanded;
+    if (isSearchMode && node.dir) {
+        effectiveExpanded = true; // 搜索模式下强制展开匹配路径
+    }
+
     var wrapper = document.createElement('div');
     wrapper.className = 'kv-tree-node';
     wrapper.dataset.key = node.key;
@@ -380,7 +482,7 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
     arrow.className = 'kv-tree-arrow';
     if (node.dir) {
         arrow.textContent = '\u25B6'; // right triangle
-        if (node._expanded) {
+        if (effectiveExpanded) {
             arrow.classList.add('expanded');
         }
         arrow.addEventListener('click', function(e) {
@@ -396,7 +498,7 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
     var icon = document.createElement('span');
     icon.className = 'kv-tree-icon ' + (node.dir ? 'dir' : 'file');
     if (node.dir) {
-        icon.innerHTML = node._expanded ? KV_ICON_FOLDER_OPEN : KV_ICON_FOLDER;
+        icon.innerHTML = effectiveExpanded ? KV_ICON_FOLDER_OPEN : KV_ICON_FOLDER;
     } else {
         icon.innerHTML = KV_ICON_FILE;
     }
@@ -432,10 +534,10 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
     wrapper.appendChild(row);
 
     // Children container (for path mode, pre-expanded nodes)
-    if (node.dir && node.nodes && node.nodes.length > 0 && node._expanded) {
+    if (node.dir && node.nodes && node.nodes.length > 0 && effectiveExpanded) {
         var children = document.createElement('div');
         children.className = 'kv-tree-children';
-        kvRenderPathMode(children, node.nodes, depth + 1);
+        kvRenderPathMode(children, node.nodes, depth + 1, matchSet);
         wrapper.appendChild(children);
     }
 
@@ -443,17 +545,8 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
 }
 
 // === Tree Expand/Collapse ===
-async function kvToggleExpand(node, wrapperEl) {
-    if (node._expanded) {
-        // Collapse
-        node._expanded = false;
-        kvRenderTree();
-        return;
-    }
-
-    // Expand — always fetch fresh children from etcd (like etcdkeeper)
-    await kvRefreshChildren(node);
-    node._expanded = true;
+function kvToggleExpand(node, wrapperEl) {
+    node._expanded = !node._expanded;
     kvRenderTree();
 }
 
@@ -501,6 +594,210 @@ async function kvRefreshChildren(node) {
     }
 }
 
+// === Auto Refresh (60s) ===
+function kvStartAutoRefresh() {
+    kvStopAutoRefresh();
+    kvState._autoRefreshTimer = setInterval(function() {
+        kvAutoRefreshKeys();
+    }, 60000);
+}
+
+function kvStopAutoRefresh() {
+    if (kvState._autoRefreshTimer) {
+        clearInterval(kvState._autoRefreshTimer);
+        kvState._autoRefreshTimer = null;
+    }
+}
+
+async function kvAutoRefreshKeys() {
+    try {
+        var resp = await kvFetch(kvApiBase() + '/keys');
+        if (resp.error || !resp.node) return;
+
+        var oldTree = kvState.treeData;
+        if (!oldTree) {
+            kvState.treeData = resp.node;
+            kvState.cache[kvState.protocol].treeData = resp.node;
+            kvRenderTree();
+            return;
+        }
+
+        // 检测编辑器是否有未保存的修改，如果有则静默合并但不刷新 selectedNode
+        var isEditing = kvState.aceEditor && kvState.selectedNode &&
+            document.getElementById('kvEditor').style.display !== 'none';
+
+        var changed = kvMergeTreeData(oldTree, resp.node);
+        if (changed) {
+            kvState.cache[kvState.protocol].treeData = kvState.treeData;
+            // 检查 selectedKey 是否仍然存在
+            if (kvState.selectedKey && !kvFindNode(kvState.treeData, kvState.selectedKey)) {
+                kvClearSelection();
+            }
+            kvRenderTree();
+        }
+    } catch (e) {
+        // 静默失败，不干扰用户
+    }
+}
+
+// kvMergeTreeData 将新树合并到旧树，保留 _expanded 和已缓存的 value
+// 返回 true 如果树结构有变化（新增/删除节点）
+function kvMergeTreeData(oldTree, newTree) {
+    var changed = false;
+
+    // 递归合并：以 newTree 的结构为准，保留 oldTree 的交互状态
+    function mergeNode(oldNode, newNode) {
+        // 保留 _expanded 状态
+        if (oldNode._expanded !== undefined) {
+            newNode._expanded = oldNode._expanded;
+        }
+        // 保留已缓存的 value（keys API 返回的 value 为空）
+        if (oldNode.value && !newNode.value) {
+            newNode.value = oldNode.value;
+        }
+
+        if (!newNode.nodes || !oldNode.nodes) {
+            // 检测子节点变化
+            var oldHasChildren = oldNode.nodes && oldNode.nodes.length > 0;
+            var newHasChildren = newNode.nodes && newNode.nodes.length > 0;
+            if (oldHasChildren !== newHasChildren) changed = true;
+            return;
+        }
+
+        // 构建 old 节点的 key → node 映射
+        var oldMap = {};
+        for (var i = 0; i < oldNode.nodes.length; i++) {
+            oldMap[oldNode.nodes[i].key] = oldNode.nodes[i];
+        }
+
+        // 检测新增和修改的节点
+        for (var j = 0; j < newNode.nodes.length; j++) {
+            var newChild = newNode.nodes[j];
+            var oldChild = oldMap[newChild.key];
+            if (oldChild) {
+                mergeNode(oldChild, newChild);
+                delete oldMap[newChild.key];
+            } else {
+                // 新增节点
+                changed = true;
+            }
+        }
+
+        // oldMap 中剩余的是被删除的节点
+        for (var k in oldMap) {
+            if (oldMap.hasOwnProperty(k)) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    mergeNode(oldTree, newTree);
+
+    // 用合并后的 newTree 替换 oldTree（newTree 已携带保留的状态）
+    kvState.treeData = newTree;
+
+    return changed;
+}
+
+// === Search Filter ===
+// kvFilterTree: 递归判断节点自身或任一后代是否匹配关键词
+// 匹配的是 key 的最后一段名称（树中显示的文本），大小写不敏感子串匹配
+// 返回 true 如果该节点或任一后代匹配
+function kvFilterTree(node, keyword) {
+    var lowerKeyword = keyword.toLowerCase();
+
+    // 获取节点显示名称（最后一段）
+    var parts = node.key.split(kvState.separator);
+    var displayName = parts[parts.length - 1] || node.key;
+    var selfMatch = displayName.toLowerCase().indexOf(lowerKeyword) !== -1;
+
+    if (selfMatch) return true;
+
+    // 检查子节点
+    if (node.nodes) {
+        for (var i = 0; i < node.nodes.length; i++) {
+            if (kvFilterTree(node.nodes[i], keyword)) return true;
+        }
+    }
+
+    return false;
+}
+
+// kvSaveExpandedState: 进入搜索模式时保存各节点的 _expanded 状态快照
+function kvSaveExpandedState() {
+    var snapshot = {};
+    function collect(node) {
+        if (node._expanded !== undefined) {
+            snapshot[node.key] = node._expanded;
+        }
+        if (node.nodes) {
+            for (var i = 0; i < node.nodes.length; i++) {
+                collect(node.nodes[i]);
+            }
+        }
+    }
+    if (kvState.treeData) collect(kvState.treeData);
+    return snapshot;
+}
+
+// kvRestoreExpandedState: 退出搜索模式时恢复各节点的 _expanded 状态
+function kvRestoreExpandedState(snapshot) {
+    if (!snapshot) return;
+    function restore(node) {
+        if (snapshot.hasOwnProperty(node.key)) {
+            node._expanded = snapshot[node.key];
+        } else {
+            delete node._expanded;
+        }
+        if (node.nodes) {
+            for (var i = 0; i < node.nodes.length; i++) {
+                restore(node.nodes[i]);
+            }
+        }
+    }
+    if (kvState.treeData) restore(kvState.treeData);
+}
+
+// kvOnSearchInput: 带 200ms debounce 的搜索入口
+var _kvSearchTimer = null;
+function kvOnSearchInput(value) {
+    clearTimeout(_kvSearchTimer);
+    _kvSearchTimer = setTimeout(function() {
+        var trimmed = value.trim();
+
+        // 进入搜索模式时保存展开状态
+        if (trimmed && !kvState.searchKeyword) {
+            kvState._expandedSnapshot = kvSaveExpandedState();
+        }
+
+        // 退出搜索模式时恢复展开状态
+        if (!trimmed && kvState.searchKeyword) {
+            kvRestoreExpandedState(kvState._expandedSnapshot);
+            kvState._expandedSnapshot = null;
+        }
+
+        kvState.searchKeyword = trimmed;
+
+        // 更新清除按钮显示
+        document.getElementById('kvSearchClear').style.display = trimmed ? '' : 'none';
+
+        kvRenderTree();
+    }, 200);
+}
+
+// kvClearSearch: 清空搜索框并恢复树
+function kvClearSearch() {
+    document.getElementById('kvSearchInput').value = '';
+    if (kvState.searchKeyword) {
+        kvRestoreExpandedState(kvState._expandedSnapshot);
+        kvState._expandedSnapshot = null;
+    }
+    kvState.searchKeyword = '';
+    document.getElementById('kvSearchClear').style.display = 'none';
+    kvRenderTree();
+}
+
 // === Node Selection ===
 async function kvSelectNode(node) {
     kvState.selectedKey = node.key;
@@ -517,58 +814,32 @@ async function kvSelectNode(node) {
         }
     });
 
-    if (node.dir) {
-        // Directory node — refresh children from etcd (handles TTL expiry)
-        // Tree 模式下已展开的目录刷新子节点；List 模式不需要刷新子树
-        if (node._expanded && kvState.treeMode === 'tree') {
-            await kvRefreshChildren(node);
-            kvRenderTree();
-            // Re-highlight selected row after re-render
-            document.querySelectorAll('.kv-tree-node').forEach(function(wrapper) {
-                if (wrapper.dataset.key === node.key) {
-                    var row = wrapper.querySelector('.kv-tree-row');
-                    if (row) row.classList.add('selected');
-                }
-            });
-        }
-
-        // 根节点是虚拟容器，不 fetch 自身的值，不显示编辑器
-        if (node.key === kvState.separator) {
-            kvShowKeyInfo(node);
-            kvHideEditor();
-            return;
-        }
-
-        // 始终 fetch 目录自身最新的 TTL/value（无论 Tree 还是 List 模式）
-        try {
-            var resp = await kvFetch(kvApiBase() + '/get?key=' + encodeURIComponent(node.key));
-            if (!resp.error && resp.node) {
-                node.value = resp.node.value;
-                node.ttl = resp.node.ttl;
-                node.createdIndex = resp.node.createdIndex;
-                node.modifiedIndex = resp.node.modifiedIndex;
-                node.version = resp.node.version;
-            }
-        } catch (e) {
-            // virtual dir, ignore
-        }
-
+    // 根节点是虚拟容器，不 fetch 自身的值，不显示编辑器
+    if (node.key === kvState.separator) {
         kvShowKeyInfo(node);
-        if (node.value) {
-            kvShowEditor(node);
-        } else {
-            kvHideEditor();
-        }
+        kvHideEditor();
         return;
     }
 
-    // Leaf: always fetch latest data (TTL is realtime)
+    // 按需加载最新 value/TTL/revision（叶子和目录统一处理）
     try {
         var resp = await kvFetch(kvApiBase() + '/get?key=' + encodeURIComponent(node.key));
         if (resp.error) {
             if (resp.code === 'key_not_found') {
-                // Key expired (TTL), remove from tree
+                if (node.dir) {
+                    // 虚拟目录（V3 路径前缀，无自身 key）— 正常情况，不移除
+                    kvShowKeyInfo(node);
+                    kvHideEditor();
+                    return;
+                }
+                // 叶子节点：Key 已过期（TTL），从树中移除
                 kvRemoveExpiredNode(node);
+                return;
+            }
+            // 目录节点可能没有自身的 value（虚拟目录），忽略错误
+            if (node.dir) {
+                kvShowKeyInfo(node);
+                kvHideEditor();
                 return;
             }
             kvShowToast(resp.error, 'error');
@@ -583,9 +854,19 @@ async function kvSelectNode(node) {
         node.version = n.version;
 
         kvShowKeyInfo(node);
-        kvShowEditor(node);
+        if (node.value) {
+            kvShowEditor(node);
+        } else {
+            kvHideEditor();
+        }
     } catch (e) {
-        kvShowToast('Failed to get key: ' + e.message, 'error');
+        if (node.dir) {
+            // 虚拟目录无 value，正常
+            kvShowKeyInfo(node);
+            kvHideEditor();
+        } else {
+            kvShowToast('Failed to get key: ' + e.message, 'error');
+        }
     }
 }
 
