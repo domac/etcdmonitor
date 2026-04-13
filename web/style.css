@@ -25,6 +25,7 @@
     --banner-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(88, 166, 255, 0.08);
     --scrollbar-track: #0d1117;
     --scrollbar-thumb: #30363d;
+    --tree-guide-color: rgba(140, 140, 140, 0.3);
 }
 
 [data-theme="light"] {
@@ -48,6 +49,7 @@
     --banner-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255,255,255,0.8);
     --scrollbar-track: #f0f2f5;
     --scrollbar-thumb: #d0d7de;
+    --tree-guide-color: rgba(100, 100, 100, 0.25);
 }
 
 * {
@@ -1059,16 +1061,19 @@ body {
 /* Tree Node Styles */
 .kv-tree-node {
     user-select: none;
+    position: relative;
 }
 .kv-tree-row {
     display: flex;
     align-items: center;
-    padding: 3px 8px;
+    padding: 2px 8px;
     cursor: pointer;
     font-size: 13px;
     color: var(--text-primary);
     transition: background 0.1s;
     white-space: nowrap;
+    position: relative;
+    line-height: 22px;
 }
 .kv-tree-row:hover {
     background: rgba(88, 166, 255, 0.08);
@@ -1076,6 +1081,40 @@ body {
 .kv-tree-row.selected {
     background: rgba(88, 166, 255, 0.15);
 }
+
+/* Tree guide lines */
+.kv-tree-children {
+    position: relative;
+    padding-left: 20px;
+}
+.kv-tree-children > .kv-tree-node {
+    position: relative;
+}
+/* Vertical guide line: runs down the left side of children group */
+.kv-tree-children > .kv-tree-node::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px dashed var(--tree-guide-color);
+}
+/* Last child: vertical line only goes to the horizontal connector */
+.kv-tree-children > .kv-tree-node:last-child::before {
+    bottom: calc(100% - 13px);
+}
+/* Horizontal guide line: connects vertical line to the node */
+.kv-tree-children > .kv-tree-node > .kv-tree-row::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 12px;
+    width: 10px;
+    height: 0;
+    border-top: 1px dashed var(--tree-guide-color);
+}
+
 .kv-tree-arrow {
     width: 16px;
     height: 16px;
@@ -1083,9 +1122,10 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: 8px;
     color: var(--text-secondary);
     transition: transform 0.15s;
+    z-index: 1;
 }
 .kv-tree-arrow.expanded {
     transform: rotate(90deg);
@@ -1094,25 +1134,31 @@ body {
     visibility: hidden;
 }
 .kv-tree-icon {
-    width: 16px;
-    height: 16px;
-    margin-right: 4px;
+    width: 18px;
+    height: 18px;
+    margin-right: 5px;
     flex-shrink: 0;
-    font-size: 12px;
-    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
 }
 .kv-tree-icon.dir {
     color: #419eda;
 }
 .kv-tree-icon.file {
-    color: var(--accent-blue);
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+.kv-tree-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
 }
 .kv-tree-name {
     overflow: hidden;
     text-overflow: ellipsis;
-}
-.kv-tree-children {
-    padding-left: 16px;
+    z-index: 1;
 }
 .kv-tree-children.collapsed {
     display: none;

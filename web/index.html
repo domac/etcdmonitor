@@ -27,18 +27,18 @@
         <div>
             <div class="header-title-row">
                 <div class="header-title">etcd Monitor</div>
-                <!-- View Toggle: Monitor / KV -->
-                <div class="kv-toggle-group kv-toggle-sm" id="headerViewToggle">
-                    <div class="kv-toggle-track">
-                        <div class="kv-toggle-slider" id="headerViewSlider"></div>
-                        <button class="kv-toggle-option active" id="headerViewMonitor" onclick="switchToDashboardView()">Monitor</button>
-                        <button class="kv-toggle-option" id="headerViewKV" onclick="switchToKVView()">KV Tree</button>
-                    </div>
+                <select class="member-select" id="memberSelect" onchange="onMemberChange()">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <!-- View Toggle: Monitor / KV -->
+            <div class="kv-toggle-group kv-toggle-sm" id="headerViewToggle">
+                <div class="kv-toggle-track">
+                    <div class="kv-toggle-slider" id="headerViewSlider"></div>
+                    <button class="kv-toggle-option active" id="headerViewMonitor" onclick="switchToDashboardView()">Monitor</button>
+                    <button class="kv-toggle-option" id="headerViewKV" onclick="switchToKVView()">KV Tree</button>
                 </div>
             </div>
-            <select class="member-select" id="memberSelect" onchange="onMemberChange()">
-                <option value="">Loading...</option>
-            </select>
         </div>
     </div>
     <div class="header-right">

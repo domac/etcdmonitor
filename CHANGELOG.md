@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.0] - 2026-04-13
+
+### Added
+
+- KV Tree 管理模块：支持 etcd v3/v2 双协议的键值浏览、创建、编辑、删除
+- 全局健康端点管理器（`internal/health/manager.go`）：
+- 多端点配置支持：`config.yaml` 的 `endpoint` 字段支持逗号分隔多地址（如 `http://10.10.10.1:2379,http://10.10.10.2:2379`）
+- 监控大盘新增 Version 信息卡片，展示 etcd 集群版本
+- 监控面板最大化/最小化切换
+
+### Changed
+
+- 全面使用 etcd 官方 Go SDK（`go.etcd.io/etcd/client/v3`）替代 etcdctl 二进制调用
+- Collector 的 `statusFromAnyEndpoint()` 改由健康管理器统一调度，移除 `lastGoodEndpoint` 缓存
+- KV Manager 的 `newClient()` 使用健康端点列表创建客户端，避免连接故障节点
+- 配置移除 `discovery_via_api`、`bin_path` 字段（不再依赖 etcdctl 二进制）
+- `request_timeout` 默认值从 5 秒调整为 30 秒
+
+### Fixed
+
+- 修复第一个端点不可用时切换成员节点卡顿问题
+- 修复 Create Node 对话框提交导致页面刷新（button type 默认 submit）
+- 修复创建子节点后父目录 TTL 丢失问题
+- 修复 V3 虚拟目录点击报 "No keys found" 误删节点问题
+- 修复目录 value 编辑后无法保存的问题
+- 修复 V3/V2 协议切换后树状态重置问题
+- 修复 List 模式下节点 TTL 不随点击刷新问题
+
 ## [0.3.3] - 2026-04-12
 
 ### Added

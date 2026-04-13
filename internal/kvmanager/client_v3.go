@@ -156,6 +156,7 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 
 	type nodeEntry struct {
 		key            string
+		realKey        string // etcd 中的原始 key（仅 isRealKey=true 时有效）
 		value          string
 		ttl            int64
 		createRevision int64
@@ -193,6 +194,7 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 
 		if len(segments) == 0 {
 			root.isRealKey = true
+			root.realKey = kvKey
 			root.value = string(kv.Value)
 			root.ttl = c.getTTLWithClient(cli, kv.Lease)
 			root.createRevision = kv.CreateRevision
@@ -203,6 +205,7 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 
 		if kvKey == key {
 			root.isRealKey = true
+			root.realKey = kvKey
 			root.value = string(kv.Value)
 			root.ttl = c.getTTLWithClient(cli, kv.Lease)
 			root.createRevision = kv.CreateRevision
@@ -232,6 +235,7 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 		}
 
 		current.isRealKey = true
+		current.realKey = kvKey
 		current.value = string(kv.Value)
 		current.ttl = c.getTTLWithClient(cli, kv.Lease)
 		current.createRevision = kv.CreateRevision
@@ -241,8 +245,13 @@ func (c *ClientV3) GetPath(key string) (*Node, error) {
 
 	var convertEntry func(e *nodeEntry) Node
 	convertEntry = func(e *nodeEntry) Node {
+		// 使用 etcd 原始 key（如果有），避免构造的路径 key 与实际 key 不一致
+		nodeKey := e.key
+		if e.isRealKey && e.realKey != "" {
+			nodeKey = e.realKey
+		}
 		node := Node{
-			Key:            e.key,
+			Key:            nodeKey,
 			Value:          e.value,
 			TTL:            e.ttl,
 			CreateRevision: e.createRevision,

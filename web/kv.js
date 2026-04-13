@@ -3,6 +3,11 @@
 // Tree view, CRUD operations, ACE Editor
 // ============================================
 
+// === SVG Icons ===
+var KV_ICON_FOLDER = '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 4.5A1.5 1.5 0 013.5 3h3.379a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 0010.12 5H16.5A1.5 1.5 0 0118 6.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 15.5v-11z" fill="currentColor"/></svg>';
+var KV_ICON_FOLDER_OPEN = '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 4.5A1.5 1.5 0 013.5 3h3.379a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 0010.12 5H16.5A1.5 1.5 0 0118 6.5V8H5.5a2 2 0 00-1.904 1.385l-1.403 4.492A1 1 0 003.146 15h13.208a1.5 1.5 0 001.428-1.039l1.6-4.8A1 1 0 0018.43 8H18V6.5A1.5 1.5 0 0016.5 5h-6.379a1.5 1.5 0 01-1.06-.44L7.939 3.44A1.5 1.5 0 006.879 3H3.5A1.5 1.5 0 002 4.5v11A1.5 1.5 0 003.5 17h13a1.5 1.5 0 001.5-1.5" fill="currentColor"/></svg>';
+var KV_ICON_FILE = '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M4 4.5A1.5 1.5 0 015.5 3h5.879a1.5 1.5 0 011.06.44l3.122 3.12a1.5 1.5 0 01.439 1.061V15.5A1.5 1.5 0 0114.5 17h-9A1.5 1.5 0 014 15.5v-11z" fill="currentColor" opacity="0.85"/><path d="M11 3v3.5A1.5 1.5 0 0012.5 8H16" fill="none" stroke="var(--bg-card, #1c2333)" stroke-width="1.5"/></svg>';
+
 // === KV Global State ===
 var kvState = {
     protocol: 'v3',           // 'v3' or 'v2'
@@ -104,6 +109,8 @@ async function kvConnect() {
     try {
         var resp = await kvFetch(kvApiBase() + '/connect', { method: 'POST' });
         if (resp.error) {
+            kvState.treeData = null;
+            kvState.cache[kvState.protocol].treeData = null;
             kvShowTreeError(resp.error);
             return;
         }
@@ -120,6 +127,8 @@ async function kvConnect() {
         // Load tree
         kvLoadTree();
     } catch (e) {
+        kvState.treeData = null;
+        kvState.cache[kvState.protocol].treeData = null;
         kvShowTreeError('Connection failed: ' + e.message);
     }
 }
@@ -140,6 +149,11 @@ function kvSwitchProtocol(proto) {
     document.getElementById('kvTabV3').classList.toggle('active', proto === 'v3');
     document.getElementById('kvTabV2').classList.toggle('active', proto === 'v2');
     document.getElementById('kvProtoSlider').classList.toggle('right', proto === 'v2');
+
+    // 切换协议时，先清理错误和树显示，避免跨协议残留
+    kvHideTreeError();
+    document.getElementById('kvTree').innerHTML = '';
+    document.getElementById('kvTreeEmpty').style.display = 'none';
 
     // 尝试从缓存恢复目标协议的树状态
     var cached = kvState.cache[proto];
@@ -263,7 +277,7 @@ function kvRenderTree() {
 
     container.innerHTML = '';
 
-    if (!kvState.treeData || (!kvState.treeData.nodes || kvState.treeData.nodes.length === 0)) {
+    if (!kvState.treeData) {
         emptyEl.style.display = '';
         return;
     }
@@ -272,7 +286,14 @@ function kvRenderTree() {
     if (kvState.treeMode === 'list') {
         kvRenderListMode(container, kvState.treeData);
     } else {
-        kvRenderPathMode(container, kvState.treeData.nodes, 0);
+        // 渲染根节点 "/" 自身，再渲染其子节点
+        var rootNode = kvState.treeData;
+        rootNode.dir = true;
+        if (rootNode._expanded === undefined) {
+            rootNode._expanded = true; // 根节点默认展开
+        }
+        var rootEl = kvCreateTreeNodeEl(rootNode, 0, false);
+        container.appendChild(rootEl);
     }
 }
 
@@ -315,7 +336,7 @@ function kvRenderListMode(container, root) {
         // Icon
         var icon = document.createElement('span');
         icon.className = 'kv-tree-icon ' + (node.dir ? 'dir' : 'file');
-        icon.textContent = node.dir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+        icon.innerHTML = node.dir ? KV_ICON_FOLDER : KV_ICON_FILE;
         row.appendChild(icon);
 
         // Full key path
@@ -352,7 +373,7 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
     if (kvState.selectedKey === node.key) {
         row.classList.add('selected');
     }
-    row.style.paddingLeft = (8 + depth * 16) + 'px';
+    row.style.paddingLeft = '8px';
 
     // Arrow
     var arrow = document.createElement('span');
@@ -374,7 +395,11 @@ function kvCreateTreeNodeEl(node, depth, showFullPath) {
     // Icon
     var icon = document.createElement('span');
     icon.className = 'kv-tree-icon ' + (node.dir ? 'dir' : 'file');
-    icon.textContent = node.dir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+    if (node.dir) {
+        icon.innerHTML = node._expanded ? KV_ICON_FOLDER_OPEN : KV_ICON_FOLDER;
+    } else {
+        icon.innerHTML = KV_ICON_FILE;
+    }
     row.appendChild(icon);
 
     // Name
@@ -505,6 +530,13 @@ async function kvSelectNode(node) {
                     if (row) row.classList.add('selected');
                 }
             });
+        }
+
+        // 根节点是虚拟容器，不 fetch 自身的值，不显示编辑器
+        if (node.key === kvState.separator) {
+            kvShowKeyInfo(node);
+            kvHideEditor();
+            return;
         }
 
         // 始终 fetch 目录自身最新的 TTL/value（无论 Tree 还是 List 模式）
