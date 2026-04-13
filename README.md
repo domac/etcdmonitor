@@ -1,3 +1,9 @@
+<div align="right">
+
+**English** | [简体中文](README_CN.md)
+
+</div>
+
 <div align="center">
 
 # etcd Monitor
@@ -21,6 +27,8 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 - **Zero dependencies** - Single static binary (~31MB), embeds web UI, SQLite storage, everything
 - **Multi-member cluster** - Auto-discovers all etcd members via official Go SDK, concurrent metrics collection
+- **Multi-endpoint failover** - Comma-separated endpoints with global health management, auto-recovery
+- **KV Tree management** - Browse, create, edit, delete keys with tree/list view, supports etcd v3 & v2
 - **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
@@ -39,8 +47,8 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 ```bash
 # Upload to server
 
-unzip etcdmonitor-v0.2.0-linux-amd64.zip
-cd etcdmonitor-v0.2.0-linux-amd64
+unzip etcdmonitor-v0.5.0-linux-amd64.zip
+cd etcdmonitor-v0.5.0-linux-amd64
 
 # Edit config
 vim config.yaml
@@ -92,6 +100,11 @@ storage:
   db_path: "data/etcdmonitor.db"
   retention_days: 7
 
+kv_manager:
+  separator: "/"                            # Key path separator for tree view
+  connect_timeout: 5                        # etcd connection timeout (seconds)
+  request_timeout: 30                       # etcd request timeout (seconds)
+
 log:
   dir: "logs"
   level: "info"
@@ -111,29 +124,34 @@ log:
 | `server.session_timeout` | Dashboard login session timeout (seconds), 0 = no expiry | `3600` |
 | `collector.interval` | Metrics collection interval (seconds) | `30` |
 | `storage.retention_days` | Data retention period (days) | `7` |
+| `kv_manager.separator` | Key path separator for KV tree view | `/` |
+| `kv_manager.connect_timeout` | etcd connection timeout for KV operations (seconds) | `5` |
+| `kv_manager.request_timeout` | etcd request timeout for KV operations (seconds) | `30` |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                 etcdmonitor (single binary)           │
-│                                                       │
-│  ┌───────────┐   ┌──────────┐   ┌─────────────────┐ │
-│  │ Collector  │──▶│  SQLite  │◀──│  HTTP/S API     │ │
-│  │ (30s poll) │   │ (per     │   │  /api/current   │ │
-│  │ concurrent │   │  member)  │   │  /api/range     │ │
-│  └─────┬──┬──┘   └──────────┘   │  /api/members   │ │
-│        │  │                      │  /api/status     │ │
-│        │  │   ┌──────────┐      │  /api/auth/*     │ │
-│        │  │   │ User     │◀─────│  /api/user/*     │ │
-│        │  │   │ Prefs    │      └────────┬────────┘ │
-│        │  │   │ (JSON)   │               │          │
-│    ┌───▼──▼───┐└──────────┘     ┌────────▼────────┐ │
-│    │  etcd    │                  │  Dashboard      │ │
-│    │ /metrics │                  │  (ECharts)      │ │
-│    │ x N nodes│                  │  Login / Config  │ │
-│    └──────────┘                  └─────────────────┘ │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                 etcdmonitor (single binary)                │
+│                                                            │
+│  ┌───────────┐   ┌──────────┐   ┌──────────────────────┐ │
+│  │ Collector  │──▶│  SQLite  │◀──│  HTTP/S API          │ │
+│  │ (30s poll) │   │ (per     │   │  /api/current        │ │
+│  │ concurrent │   │  member)  │   │  /api/range          │ │
+│  └─────┬──┬──┘   └──────────┘   │  /api/members        │ │
+│        │  │                      │  /api/status          │ │
+│  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*         │ │
+│  │  Health   │   │ User     │◀──│  /api/user/*         │ │
+│  │  Manager  │   │ Prefs    │   │  /api/kv/v3/*        │ │
+│  │ (15s chk) │   │ (JSON)   │   │  /api/kv/v2/*        │ │
+│  └─────┬─────┘   └──────────┘   └──────────┬───────────┘ │
+│        │                                     │            │
+│  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────┐ │
+│  │    etcd     │   │KV Manager│──▶│  Dashboard         │ │
+│  │  /metrics   │   │ v3 + v2  │   │  Monitor + KV Tree │ │
+│  │  x N nodes  │   │per-request│  │  Login / Config     │ │
+│  └─────────────┘   └──────────┘   └────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Dashboard Panels
@@ -220,6 +238,35 @@ etcd Monitor automatically discovers all cluster members via the official etcd v
 - Dashboard header has a dropdown to switch between members
 - Local node is auto-detected even when config uses `127.0.0.1`
 
+## Multi-Endpoint Failover
+
+Configure multiple etcd endpoints for high availability:
+
+```yaml
+etcd:
+  endpoint: "http://10.0.1.1:2379,http://10.0.1.2:2379,http://10.0.1.3:2379"
+```
+
+- **Startup probe** - All endpoints are probed in parallel at startup; unhealthy ones are excluded
+- **Background health check** - Every 15 seconds, all endpoints are re-checked; recovered endpoints automatically rejoin
+- **Global healthy list** - Collector, KV Manager, and Auth modules all share the healthy endpoint list
+- **All-dead protection** - If all endpoints become unreachable, the process exits with a clear log message
+- Fully backward-compatible: single endpoint config works as before
+
+## KV Tree Management
+
+Built-in key-value browser and editor, accessible via the **KV Tree** tab in the dashboard header.
+
+- **Dual protocol** - Supports both etcd v3 (gRPC) and v2 (HTTP) APIs, toggle with one click
+- **Tree view** - Hierarchical tree with expand/collapse, dashed guide lines, SVG folder/file icons
+- **List view** - Flat key listing with full paths
+- **Root node** - The `/` root is always visible, right-click to create keys at the top level
+- **CRUD operations** - Create, read, update, delete keys via context menu and editor panel
+- **ACE Editor** - Syntax highlighting for JSON, YAML, TOML, XML, and more; dark/light theme sync
+- **TTL support** - Set time-to-live on keys; expired keys are automatically detected and removed from tree
+- **Per-request client** - Each KV operation creates a temporary etcd connection (etcdkeeper pattern), no long-lived connections
+- **Protocol state cache** - Switching between v3/v2 preserves each protocol's tree state
+
 ## Theme
 
 Dashboard supports **Dark** and **Light** themes. Click the theme toggle button (☾ / ☀) in the top-right corner to switch. Your preference is saved in the browser's localStorage.
@@ -291,6 +338,7 @@ etcdmonitor/
 │   └── main.go                 # Entry point, HTTP/HTTPS server, logger
 ├── internal/
 │   ├── config/config.go        # Configuration loading & defaults
+│   ├── health/manager.go       # Global healthy endpoint management
 │   ├── collector/
 │   │   ├── collector.go        # Concurrent metrics collection engine
 │   │   ├── member.go           # Cluster member discovery (etcd v3 SDK)
@@ -300,6 +348,11 @@ etcdmonitor/
 │   │   ├── auth.go             # Session management & token handling
 │   │   ├── detector.go         # Auto-detect etcd auth status at startup
 │   │   └── handler.go          # Login/logout/status HTTP handlers
+│   ├── kvmanager/
+│   │   ├── client_v3.go        # etcd v3 KV operations (per-request client)
+│   │   ├── client_v2.go        # etcd v2 KV operations
+│   │   ├── handler.go          # KV REST API handlers (CRUD + tree)
+│   │   └── types.go            # Node, request/response types
 │   ├── prefs/
 │   │   └── prefs.go            # Per-user panel config (JSON file store)
 │   ├── api/
@@ -307,10 +360,12 @@ etcdmonitor/
 │   │   └── handler.go          # REST API handlers
 │   └── logger/logger.go        # Zap logger with rotation
 ├── web/                        # Embedded frontend (HTML/CSS/JS + ECharts)
-│   ├── index.html              # Dashboard page
+│   ├── index.html              # Dashboard page (Monitor + KV Tree)
 │   ├── login.html              # Login page (shown when etcd auth enabled)
 │   ├── app.js                  # Dashboard logic, charts, panel config
-│   └── style.css               # Dark/light theme styles
+│   ├── kv.js                   # KV Tree management (tree view, CRUD, ACE Editor)
+│   ├── style.css               # Dark/light theme styles
+│   └── vendor/                 # ACE Editor (syntax highlighting, themes)
 ├── certs/                      # TLS certificates (generated, git-ignored)
 ├── embed.go                    # go:embed for web assets
 ├── config.yaml                 # Default configuration
@@ -324,6 +379,8 @@ etcdmonitor/
 
 ## API Reference
 
+### Dashboard APIs
+
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
 | `/api/auth/login` | POST | No | Login with etcd credentials |
@@ -336,6 +393,28 @@ etcdmonitor/
 | `/api/user/panel-config` | GET | Yes | Get user's panel visibility & order config |
 | `/api/user/panel-config` | PUT | Yes | Save user's panel visibility & order config |
 | `/api/debug` | GET | Yes | Debug info: DB member IDs, collector state |
+
+### KV Management APIs (v3)
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/kv/v3/connect` | POST | Yes | Connect and get cluster info (version, leader, DB size) |
+| `/api/kv/v3/separator` | GET | Yes | Get the key path separator |
+| `/api/kv/v3/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
+| `/api/kv/v3/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
+| `/api/kv/v3/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl) |
+| `/api/kv/v3/delete` | POST | Yes | Delete a key or directory (JSON body: key, dir) |
+
+### KV Management APIs (v2)
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/kv/v2/connect` | POST | Yes | Connect and check v2 API availability |
+| `/api/kv/v2/separator` | GET | Yes | Get the key path separator |
+| `/api/kv/v2/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
+| `/api/kv/v2/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
+| `/api/kv/v2/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl, dir) |
+| `/api/kv/v2/delete` | POST | Yes | Delete a key or directory (JSON body: key, dir) |
 
 > **Auth**: When etcd auth is enabled, protected endpoints require a valid session (via `Authorization: Bearer <token>` header). When etcd auth is not enabled, all endpoints are open.
 
