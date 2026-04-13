@@ -534,7 +534,6 @@ function kvShowKeyInfo(node) {
 // === Editor ===
 function kvInitEditor() {
     var editor = ace.edit('kvEditor');
-    editor.setTheme(currentTheme === 'dark' ? 'ace/theme/monokai' : 'ace/theme/chrome');
     editor.session.setMode('ace/mode/json');
     editor.setFontSize(13);
     editor.setShowPrintMargin(false);
@@ -546,6 +545,14 @@ function kvInitEditor() {
         wrap: true
     });
     kvState.aceEditor = editor;
+    kvApplyEditorTheme();
+}
+
+// 应用编辑器主题（主题 JS 已在 HTML 中预加载，setTheme 同步生效）
+function kvApplyEditorTheme() {
+    if (!kvState.aceEditor) return;
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    kvState.aceEditor.setTheme(isDark ? 'ace/theme/monokai' : 'ace/theme/chrome');
 }
 
 function kvShowEditor(node) {
@@ -558,6 +565,7 @@ function kvShowEditor(node) {
     kvState._formatted = false;
 
     if (kvState.aceEditor) {
+        kvApplyEditorTheme();
         kvState.aceEditor.setValue(kvState._rawValue, -1);
         kvState.aceEditor.clearSelection();
 
@@ -658,9 +666,8 @@ if (_origToggleTheme) {
 (function() {
     var observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(m) {
-            if (m.attributeName === 'data-theme' && kvState.aceEditor) {
-                var theme = document.documentElement.getAttribute('data-theme');
-                kvState.aceEditor.setTheme(theme === 'dark' ? 'ace/theme/monokai' : 'ace/theme/chrome');
+            if (m.attributeName === 'data-theme') {
+                kvApplyEditorTheme();
             }
         });
     });
