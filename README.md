@@ -214,7 +214,7 @@ log:
 
 ### Dashboard HTTPS
 
-The install package includes a self-signed TLS certificate (valid for 10 years). To enable HTTPS:
+The install package includes a self-signed TLS certificate (valid for 1 year). To enable HTTPS:
 
 ```yaml
 # config.yaml
@@ -238,8 +238,8 @@ systemctl restart etcdmonitor
 
 ```bash
 # In the source repository
-./gen-certs.sh          # default: 10 years
-./gen-certs.sh 365      # custom: 1 year
+./tools/gen-certs.sh          # default: 1 year
+./tools/gen-certs.sh 730      # custom: 2 years
 ```
 
 > Self-signed certificates will trigger a browser warning. Click "Advanced" > "Proceed" to continue, or use a certificate from a trusted CA for production.

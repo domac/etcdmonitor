@@ -214,7 +214,7 @@ log:
 
 ### Dashboard HTTPS
 
-安装包内置了自签名 TLS 证书（有效期 10 年）。启用 HTTPS：
+安装包内置了自签名 TLS 证书（有效期 1 年）。启用 HTTPS：
 
 ```yaml
 # config.yaml
@@ -238,8 +238,8 @@ systemctl restart etcdmonitor
 
 ```bash
 # 在源码仓库中
-./gen-certs.sh          # 默认: 10 年
-./gen-certs.sh 365      # 自定义: 1 年
+./tools/gen-certs.sh          # 默认: 1 年
+./tools/gen-certs.sh 730      # 自定义: 2 年
 ```
 
 > 自签名证书会触发浏览器安全警告。点击"高级" > "继续前往"即可，生产环境建议使用受信任的 CA 证书。

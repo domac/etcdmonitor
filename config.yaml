@@ -29,7 +29,7 @@ etcd:
 server:
   # 监控面板监听地址
   listen: ":9090"
-  # 是否开启 HTTPS（需要先生成证书：./gen-certs.sh）
+  # 是否开启 HTTPS（需要先生成证书：./tools/gen-certs.sh）
   tls_enable: false
   # TLS 证书文件路径（相对于程序所在目录）
   tls_cert: "certs/server.crt"
