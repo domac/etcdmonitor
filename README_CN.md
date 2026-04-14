@@ -35,6 +35,7 @@
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
 - **深色 / 浅色主题** - 一键切换，偏好保存在浏览器中
 - **HTTPS 支持** - 可选 TLS，内置自签名证书，也可使用自有证书
+- **etcd TLS/mTLS** - 支持通过客户端证书连接启用了 TLS 的 etcd 集群（CA + 客户端证书 + 私钥）
 - **自动降采样** - 智能查询聚合，即使 7 天数据量也能保持面板流畅
 - **一键部署** - `install.sh` 自动配置 systemd 服务，`uninstall.sh` 一键清理
 - **智能端点检测** - 支持 `127.0.0.1` 配置，自动解析为真实成员 ID
@@ -86,6 +87,12 @@ etcd:
   username: ""                              # 采集器凭据（未启用认证则留空）
   password: ""
   metrics_path: "/metrics"
+  tls_enable: false                         # true: 通过 TLS 连接 etcd
+  tls_cert: "certs/client.crt"              # 客户端证书（用于 mTLS）
+  tls_key: "certs/client.key"               # 客户端私钥（用于 mTLS）
+  tls_ca_cert: "certs/ca.crt"              # CA 证书（用于验证 etcd 服务端证书）
+  tls_insecure_skip_verify: false           # 跳过服务端证书验证（仅用于测试）
+  tls_server_name: ""                       # 服务端名称（SNI 验证）
 
 server:
   listen: ":9090"
@@ -118,6 +125,12 @@ log:
 | `etcd.endpoint` | etcd 客户端地址（逗号分隔多地址支持故障转移） | `http://127.0.0.1:2379` |
 | `etcd.username` | 采集器认证用户名（未启用认证则留空） | - |
 | `etcd.password` | 采集器认证密码 | - |
+| `etcd.tls_enable` | 启用 TLS 连接 etcd | `false` |
+| `etcd.tls_cert` | 客户端证书文件路径（用于 mTLS） | `certs/client.crt` |
+| `etcd.tls_key` | 客户端私钥文件路径（用于 mTLS） | `certs/client.key` |
+| `etcd.tls_ca_cert` | CA 证书文件路径（用于验证 etcd 服务端证书） | `certs/ca.crt` |
+| `etcd.tls_insecure_skip_verify` | 跳过服务端证书验证（仅用于测试） | `false` |
+| `etcd.tls_server_name` | 服务端名称（SNI 验证） | - |
 | `server.listen` | Dashboard 监听地址 | `:9090` |
 | `server.tls_enable` | 启用 HTTPS | `false` |
 | `server.tls_cert` | TLS 证书文件路径 | `certs/server.crt` |
@@ -199,7 +212,9 @@ log:
 
 ## HTTPS / TLS
 
-安装包内置了自签名 TLS 证书（有效期 10 年）。启用 HTTPS：
+### Dashboard HTTPS
+
+安装包内置了自签名 TLS 证书（有效期 1 年）。启用 HTTPS：
 
 ```yaml
 # config.yaml
@@ -223,11 +238,53 @@ systemctl restart etcdmonitor
 
 ```bash
 # 在源码仓库中
-./gen-certs.sh          # 默认: 10 年
-./gen-certs.sh 365      # 自定义: 1 年
+./tools/gen-certs.sh          # 默认: 1 年
+./tools/gen-certs.sh 730      # 自定义: 2 年
 ```
 
 > 自签名证书会触发浏览器安全警告。点击"高级" > "继续前往"即可，生产环境建议使用受信任的 CA 证书。
+
+### etcd 客户端 TLS（mTLS）
+
+如果 etcd 集群使用 TLS 部署（`client-transport-security` 配置了 `client-cert-auth: true`），etcd Monitor 支持通过客户端证书连接。
+
+**配置方式：**
+
+```yaml
+etcd:
+  endpoint: "https://10.0.1.1:2379,https://10.0.1.2:2379,https://10.0.1.3:2379"
+  tls_enable: true
+  tls_cert: "certs/etcd-client.pem"         # 客户端证书
+  tls_key: "certs/etcd-client-key.pem"      # 客户端私钥
+  tls_ca_cert: "certs/ca.pem"               # CA 证书
+```
+
+**部署步骤：**
+
+```bash
+# 将 etcd 客户端证书复制到 etcdmonitor 的 certs 目录
+cp /etc/etcd/ssl/etcd-client.pem certs/etcd-client.pem
+cp /etc/etcd/ssl/etcd-client-key.pem certs/etcd-client-key.pem
+cp /etc/etcd/ssl/ca.pem certs/ca.pem
+
+# 编辑 config.yaml（设置 tls_enable: true 并配置证书路径）
+vim config.yaml
+
+# 重启服务
+systemctl restart etcdmonitor
+```
+
+**支持的场景：**
+
+| 场景 | `tls_enable` | `tls_cert` / `tls_key` | `tls_ca_cert` | `username` / `password` |
+|---|---|---|---|---|
+| 明文 HTTP（无认证） | `false` | - | - | - |
+| 明文 HTTP + 密码认证 | `false` | - | - | ✅ |
+| HTTPS + 仅 CA（验证服务端） | `true` | - | ✅ | 可选 |
+| HTTPS + mTLS（客户端证书） | `true` | ✅ | ✅ | 可选 |
+| HTTPS + mTLS + 密码认证 | `true` | ✅ | ✅ | ✅ |
+
+> **说明：** 当 `tls_enable: true` 时，endpoint 必须使用 `https://`。TLS 配置统一应用于所有 etcd 连接：健康探测、指标采集、成员发现、KV 管理和认证。
 
 ## 多成员集群支持
 
@@ -319,7 +376,7 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-服务默认以非 root 用户运行（可在 `install.sh` 中配置），崩溃后自动重启。
+服务默认以 `root` 用户运行。如需更换运行用户，安装前修改 `install.sh` 顶部的 `RUN_USER` 变量即可。服务崩溃后自动重启。
 
 ## 端点变更检测
 
@@ -332,53 +389,6 @@ sudo ./uninstall.sh
 ```
 
 移除 systemd 服务。可选删除数据和日志（交互式确认）。二进制文件和配置保留以便重新安装。
-
-## 项目结构
-
-```
-etcdmonitor/
-├── cmd/etcdmonitor/
-│   └── main.go                 # 入口，HTTP/HTTPS 服务，日志
-├── internal/
-│   ├── config/config.go        # 配置加载与默认值
-│   ├── health/manager.go       # 全局健康端点管理
-│   ├── collector/
-│   │   ├── collector.go        # 并发指标采集引擎
-│   │   ├── member.go           # 集群成员发现（etcd v3 SDK）
-│   │   └── parser.go           # Prometheus 文本格式解析器
-│   ├── storage/storage.go      # SQLite 时序存储与降采样
-│   ├── auth/
-│   │   ├── auth.go             # 会话管理与令牌处理
-│   │   ├── detector.go         # 启动时自动检测 etcd 认证状态
-│   │   └── handler.go          # 登录/登出/状态 HTTP 处理器
-│   ├── kvmanager/
-│   │   ├── client_v3.go        # etcd v3 KV 操作（按请求连接）
-│   │   ├── client_v2.go        # etcd v2 KV 操作
-│   │   ├── handler.go          # KV REST API 处理器（CRUD + 树）
-│   │   └── types.go            # Node、请求/响应类型
-│   ├── prefs/
-│   │   └── prefs.go            # 按用户面板配置（JSON 文件存储）
-│   ├── api/
-│   │   ├── api.go              # 路由、中间件与面板配置处理器
-│   │   └── handler.go          # REST API 处理器
-│   └── logger/logger.go        # Zap 日志与日志轮转
-├── web/                        # 内嵌前端（HTML/CSS/JS + ECharts）
-│   ├── index.html              # Dashboard 页面（监控 + KV 树管理）
-│   ├── login.html              # 登录页面（etcd 启用认证时显示）
-│   ├── app.js                  # Dashboard 逻辑、图表、面板配置
-│   ├── kv.js                   # KV 树管理（树视图、CRUD、ACE 编辑器）
-│   ├── style.css               # 深色/浅色主题样式
-│   └── vendor/                 # ACE 编辑器（语法高亮、主题）
-├── certs/                      # TLS 证书（生成后 git-ignored）
-├── embed.go                    # go:embed 嵌入 web 资源
-├── config.yaml                 # 默认配置
-├── gen-certs.sh                # TLS 证书生成脚本
-├── build.sh                    # 构建脚本
-├── package.sh                  # 打包脚本（构建 + zip）
-├── install.sh                  # 一键安装（systemd）
-├── uninstall.sh                # 一键卸载
-└── version                     # 版本文件（构建脚本读取）
-```
 
 ## API 参考
 

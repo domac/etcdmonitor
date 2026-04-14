@@ -3,6 +3,7 @@ etcd:
   # etcd 端点地址（支持逗号分隔多地址，SDK 内置 failover）
   # 单地址: "http://127.0.0.1:2379"
   # 多地址: "http://a:2379,http://b:2379,http://c:2379"
+  # 使用 HTTPS 时: "https://a:2379,https://b:2379"
   endpoint: "http://127.0.0.1:2379"
   # 认证用户名（Collector 采集 etcd 指标使用）
   username: ""
@@ -11,10 +12,24 @@ etcd:
   # metrics 路径
   metrics_path: "/metrics"
 
+  # ===== TLS 配置（etcd 客户端连接） =====
+  # 是否启用 TLS/SSL 连接到 etcd（需要 etcd 配置了 TLS）
+  tls_enable: false
+  # TLS 客户端证书文件路径（相对于程序所在目录）
+  tls_cert: "certs/client.crt"
+  # TLS 客户端私钥文件路径（相对于程序所在目录）
+  tls_key: "certs/client.key"
+  # TLS CA 证书文件路径（用于验证 etcd 服务端证书）
+  tls_ca_cert: "certs/ca.crt"
+  # 跳过服务端证书验证（仅用于测试，生产环境不推荐）
+  tls_insecure_skip_verify: false
+  # TLS 服务端名称（SNI），用于服务端证书验证
+  tls_server_name: ""
+
 server:
   # 监控面板监听地址
   listen: ":9090"
-  # 是否开启 HTTPS（需要先生成证书：./gen-certs.sh）
+  # 是否开启 HTTPS（需要先生成证书：./tools/gen-certs.sh）
   tls_enable: false
   # TLS 证书文件路径（相对于程序所在目录）
   tls_cert: "certs/server.crt"

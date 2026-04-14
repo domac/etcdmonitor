@@ -8,6 +8,7 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/tls"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -19,6 +20,14 @@ func DetectAuthRequired(cfg *config.Config, healthMgr *health.Manager) bool {
 	etcdCfg := clientv3.Config{
 		Endpoints:   healthMgr.HealthyEndpoints(),
 		DialTimeout: 5 * time.Second,
+	}
+
+	// 应用 TLS 配置
+	tlsCfg, err := tls.LoadClientTLSConfig(cfg)
+	if err != nil {
+		logger.Errorf("[Auth] Failed to load TLS configuration: %v", err)
+	} else if tlsCfg != nil {
+		etcdCfg.TLS = tlsCfg
 	}
 
 	client, err := clientv3.New(etcdCfg)

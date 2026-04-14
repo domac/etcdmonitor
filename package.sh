@@ -68,7 +68,7 @@ mkdir -p "$STAGING_DIR/certs"
 openssl req -x509 -newkey rsa:2048 \
     -keyout "$STAGING_DIR/certs/server.key" \
     -out "$STAGING_DIR/certs/server.crt" \
-    -days 3650 -nodes \
+    -days 365 -nodes \
     -subj "/CN=etcdmonitor" \
     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0.0.0.0" 2>/dev/null
 chmod 600 "$STAGING_DIR/certs/server.key"

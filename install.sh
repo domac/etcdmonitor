@@ -45,16 +45,22 @@ if [ ! -f "$CONFIG" ]; then
     exit 1
 fi
 
-# 检测运行用户：优先 mqq，不存在则 fallback root
+# ===== 运行用户配置 =====
+# 修改此处指定服务运行用户（默认 root）
+# 例如: RUN_USER="etcdmonitor" 或 RUN_USER="ops"
 RUN_USER="root"
-RUN_GROUP="root"
-if id "mqq" &>/dev/null; then
-    RUN_USER="mqq"
-    RUN_GROUP=$(id -gn mqq)
-    echo "[INFO] Run as user: mqq (group: $RUN_GROUP)"
-else
-    echo "[WARN] User 'mqq' not found, fallback to root"
+
+# 校验用户是否存在
+if ! id "$RUN_USER" &>/dev/null; then
+    echo "[ERROR] User '$RUN_USER' does not exist."
+    echo "        Create it first:  useradd -r -s /sbin/nologin $RUN_USER"
+    echo "        Or change RUN_USER at the top of this script."
+    exit 1
 fi
+
+# 自动推导用户组
+RUN_GROUP=$(id -gn "$RUN_USER")
+echo "[INFO] Run as user: $RUN_USER (group: $RUN_GROUP)"
 
 # 创建数据目录
 mkdir -p "$INSTALL_DIR/data"

@@ -6,12 +6,12 @@ echo "  etcdmonitor - Generate TLS Certificates"
 echo "========================================="
 
 cd "$(dirname "$0")"
-CERT_DIR="certs"
+CERT_DIR="../certs"
 
 mkdir -p "$CERT_DIR"
 
 # 证书有效期（天）
-DAYS="${1:-3650}"
+DAYS="${1:-365}"
 
 echo "[INFO] Generating self-signed TLS certificate (valid for ${DAYS} days)..."
 
