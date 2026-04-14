@@ -66,10 +66,10 @@ Open `http://<server-ip>:9090` in your browser.
 git clone https://github.com/domac/etcdmonitor.git
 cd etcdmonitor
 
-# Build for Linux
+# Build binary only (for development/testing)
 ./build.sh
 
-# Create distributable package
+# Create full deployment package (binary + config + certs + install scripts)
 ./package.sh
 # Output: dist/etcdmonitor-v<version>-linux-amd64.zip
 ```

@@ -66,10 +66,10 @@ sh install.sh
 git clone https://github.com/domac/etcdmonitor.git
 cd etcdmonitor
 
-# 构建 Linux 版本
+# 仅编译二进制文件（用于开发/测试）
 ./build.sh
 
-# 创建发布包
+# 创建完整部署包（二进制 + 配置 + 证书 + 安装脚本）
 ./package.sh
 # 输出: dist/etcdmonitor-v<version>-linux-amd64.zip
 ```
