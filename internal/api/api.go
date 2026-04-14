@@ -28,10 +28,11 @@ type API struct {
 	sessionStore *auth.MemorySessionStore
 	prefsStore   *prefs.FileStore
 	authHandler  *auth.AuthHandler
+	version      string
 }
 
 // New 创建 API 实例
-func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, healthMgr *health.Manager, authRequired bool, sessionStore *auth.MemorySessionStore, prefsStore *prefs.FileStore) *API {
+func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, healthMgr *health.Manager, authRequired bool, sessionStore *auth.MemorySessionStore, prefsStore *prefs.FileStore, version string) *API {
 	return &API{
 		cfg:          cfg,
 		store:        store,
@@ -40,7 +41,8 @@ func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, hea
 		authRequired: authRequired,
 		sessionStore: sessionStore,
 		prefsStore:   prefsStore,
-		authHandler:  auth.NewAuthHandler(cfg, sessionStore, healthMgr, authRequired),
+		authHandler:  auth.NewAuthHandler(cfg, sessionStore, healthMgr, authRequired, version),
+		version:      version,
 	}
 }
 

@@ -140,6 +140,7 @@ func (a *API) handleStatus(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "running",
+		"app_version":       a.version,
 		"collector_up":      collectorUp,
 		"etcd_endpoint":     a.cfg.Etcd.Endpoint,
 		"etcd_version":      a.collector.GetVersion(),

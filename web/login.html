@@ -154,7 +154,7 @@
     <div class="login-card">
         <img class="login-logo" src="etcd-icon.svg" alt="etcd">
         <div class="login-title">etcd Monitor</div>
-        <div class="login-subtitle">请输入 etcd 凭据以访问监控大盘</div>
+        <div class="login-subtitle" id="loginSubtitle"></div>
 
         <form id="loginForm">
             <div class="form-group">
@@ -190,6 +190,10 @@
             var resp = await fetch('/api/auth/status', { headers: headers });
             if (resp.ok) {
                 var data = await resp.json();
+                // 显示版本号
+                if (data.app_version) {
+                    document.getElementById('loginSubtitle').textContent = 'v' + data.app_version;
+                }
                 if (!data.auth_required || data.authenticated) {
                     window.location.href = '/';
                     return;

@@ -26,15 +26,21 @@ type AuthHandler struct {
 	sessionStore *MemorySessionStore
 	healthMgr    *health.Manager
 	authRequired bool
+	version      string
 }
 
 // NewAuthHandler 创建 AuthHandler 实例
-func NewAuthHandler(cfg *config.Config, sessionStore *MemorySessionStore, healthMgr *health.Manager, authRequired bool) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, sessionStore *MemorySessionStore, healthMgr *health.Manager, authRequired bool, version ...string) *AuthHandler {
+	v := ""
+	if len(version) > 0 {
+		v = version[0]
+	}
 	return &AuthHandler{
 		cfg:          cfg,
 		sessionStore: sessionStore,
 		healthMgr:    healthMgr,
 		authRequired: authRequired,
+		version:      v,
 	}
 }
 
@@ -114,6 +120,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 	if !h.authRequired {
 		c.JSON(http.StatusOK, gin.H{
 			"auth_required": false,
+			"app_version":   h.version,
 		})
 		return
 	}
@@ -123,6 +130,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"auth_required": true,
 			"authenticated": false,
+			"app_version":   h.version,
 		})
 		return
 	}
@@ -132,6 +140,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"auth_required": true,
 			"authenticated": false,
+			"app_version":   h.version,
 		})
 		return
 	}
@@ -141,6 +150,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		"authenticated": true,
 		"username":      session.Username,
 		"expires_at":    session.ExpiresAt.Unix(),
+		"app_version":   h.version,
 	})
 }
 

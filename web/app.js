@@ -1205,8 +1205,10 @@ async function refresh() {
         updateMemberCard(status.members, currentMetrics);
     }
 
-    document.getElementById('lastUpdate').textContent =
-        'Updated: ' + new Date().toLocaleTimeString('zh-CN');
+    // Update app version
+    if (status && status.app_version) {
+        document.getElementById('lastUpdate').textContent = 'v' + status.app_version;
+    }
 
     // Update banner and cards
     updateBanner(currentMetrics);
@@ -1768,7 +1770,7 @@ function switchToKVView() {
     document.getElementById('refreshInterval').style.display = 'none';
     document.getElementById('refreshBtn').style.display = 'none';
     document.getElementById('panelConfigBtn').style.display = 'none';
-    document.getElementById('lastUpdate').style.display = 'none';
+    document.getElementById('lastUpdate').style.display = '';
     // Initialize KV module if available
     if (typeof kvInit === 'function') {
         kvInit();

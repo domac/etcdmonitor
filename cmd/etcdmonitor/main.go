@@ -116,7 +116,7 @@ func main() {
 	router.Use(api.SecurityHeadersMiddleware(cfg))
 
 	// 初始化 API 并注册路由
-	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore)
+	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore, Version)
 	protected := a.SetupRoutes(router)
 
 	// 初始化 KV 管理模块
