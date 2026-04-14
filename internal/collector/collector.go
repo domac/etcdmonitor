@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"sync"
@@ -137,6 +138,14 @@ func (c *Collector) GetMembers() []MemberInfo {
 
 	result := make([]MemberInfo, len(c.members))
 	copy(result, c.members)
+
+	// 根据 latest snapshot 填充 IsLeader
+	for i := range result {
+		if latest, ok := c.latest[result[i].ID]; ok {
+			result[i].IsLeader = latest["etcd_server_is_leader"] == 1
+		}
+	}
+
 	return result
 }
 
@@ -179,6 +188,33 @@ func (c *Collector) statusFromAnyEndpoint() *clientv3.StatusResponse {
 		return nil
 	}
 	return resp
+}
+
+// injectRaftStatus 对单个成员调用 Status() 获取 raft_term / raft_index 并注入 snapshot
+func (c *Collector) injectRaftStatus(member MemberInfo, snapshot map[string]float64) {
+	if c.etcdClient == nil || snapshot == nil {
+		return
+	}
+
+	endpoint := member.CollectEndpoint
+	if endpoint == "" {
+		endpoint = member.Endpoint
+	}
+	if endpoint == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.etcdClient.Status(ctx, endpoint)
+	if err != nil {
+		logger.Debugf("[Collector] [%s] Status() for raft info failed: %v", member.Name, err)
+		return
+	}
+
+	snapshot["raft_term"] = float64(resp.RaftTerm)
+	snapshot["raft_index"] = float64(resp.RaftIndex)
 }
 
 // memberSnapshot 一次采集的结果
@@ -264,7 +300,9 @@ func (c *Collector) collect() {
 	}()
 
 	// 阶段2：串行写入 SQLite（避免 SQLITE_BUSY）
+	// 写入前注入 raft_term / raft_index（通过 Status() gRPC 获取）
 	for res := range results {
+		c.injectRaftStatus(res.member, res.snapshot)
 		if err := c.store.Store(now, res.member.ID, res.snapshot); err != nil {
 			logger.Errorf("[Collector] [%s] Error storing metrics: %v", res.member.Name, err)
 		} else {

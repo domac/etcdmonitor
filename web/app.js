@@ -453,6 +453,14 @@ function updateCards(metrics) {
         failedRateEl.textContent = '-';
         failedRateEl.className = 'value red';
     }
+
+    // Raft Term
+    const raftTerm = metrics['raft_term'];
+    document.getElementById('cardRaftTerm').textContent = raftTerm !== undefined ? formatNumber(raftTerm) : '-';
+
+    // Raft Index（直接显示完整数字）
+    const raftIndex = metrics['raft_index'];
+    document.getElementById('cardRaftIndex').textContent = raftIndex !== undefined ? Math.round(raftIndex).toLocaleString() : '-';
 }
 
 // === Update Charts ===
@@ -1274,7 +1282,7 @@ function updateMemberSelect(memberList, defaultID) {
         const opt = document.createElement('option');
         opt.value = m.id;
         const label = m.name ? `${m.name} (${m.endpoint})` : m.endpoint;
-        opt.textContent = label;
+        opt.textContent = m.is_leader ? `${label} ⭐` : label;
         select.appendChild(opt);
     });
 
@@ -1305,25 +1313,25 @@ function updateMemberCard(memberList, currentMetrics) {
     tooltip.innerHTML = '';  // Clear safely
     
     memberList.forEach(m => {
-        // 判断 leader/follower（如果当前选中的成员有 is_leader 指标）
-        const dotClass = 'follower';
+        // 判断 leader/follower
+        const dotClass = m.is_leader ? 'leader' : 'follower';
         const name = m.name || m.id.substring(0, 8);
         const url = m.endpoint || (m.client_urls && m.client_urls[0]) || '-';
-        
+
         // Create DOM elements safely (no innerHTML with unsanitized data)
         const itemDiv = document.createElement('div');
         itemDiv.className = 'member-tooltip-item';
         itemDiv.onclick = () => switchToMember(m.id);
-        
+
         const dotDiv = document.createElement('div');
         dotDiv.className = 'member-tooltip-dot ' + dotClass;
-        
+
         const infoDiv = document.createElement('div');
-        
+
         const nameDiv = document.createElement('div');
         nameDiv.className = 'member-tooltip-name';
-        nameDiv.textContent = name;  // textContent is safe - no HTML interpretation
-        
+        nameDiv.textContent = m.is_leader ? name + ' ⭐' : name;
+
         const urlDiv = document.createElement('div');
         urlDiv.className = 'member-tooltip-url';
         urlDiv.textContent = url;  // textContent is safe - no HTML interpretation

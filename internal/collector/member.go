@@ -19,6 +19,7 @@ type MemberInfo struct {
 	Endpoint        string   `json:"endpoint"`         // 展示用（advertise URL）
 	CollectEndpoint string   `json:"-"`                // 采集用（本机可能是 127.0.0.1）
 	IsDefault       bool     `json:"is_default"`
+	IsLeader        bool     `json:"is_leader"`
 }
 
 // discoverMembers 通过 etcd v3 SDK 获取集群成员列表

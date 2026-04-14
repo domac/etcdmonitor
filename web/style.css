@@ -329,7 +329,7 @@ body {
 /* === Main Layout === */
 .main {
     padding: 20px 24px;
-    max-width: 1600px;
+    max-width: 1920px;
     margin: 0 auto;
 }
 
@@ -424,8 +424,8 @@ body {
 /* === Overview Cards === */
 .overview-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 12px;
     margin-bottom: 24px;
 }
 
@@ -433,8 +433,9 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 16px 20px;
+    padding: 14px 16px;
     transition: all 0.2s;
+    min-width: 0;
 }
 
 .stat-card:hover {
@@ -443,18 +444,24 @@ body {
 }
 
 .stat-card .label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stat-card .value {
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stat-card .value.green { color: var(--accent-green); }
@@ -642,6 +649,12 @@ body {
 }
 
 /* === Responsive === */
+@media (max-width: 1400px) {
+    .overview-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
 @media (max-width: 1200px) {
     .panel-grid {
         grid-template-columns: 1fr;
