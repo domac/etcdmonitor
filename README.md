@@ -376,7 +376,7 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-The service runs as a non-root user when available (configurable in `install.sh`), with auto-restart on crash.
+The service runs as `root` by default. To run as a different user, edit the `RUN_USER` variable at the top of `install.sh` before installation. The service auto-restarts on crash.
 
 ## Endpoint Change Detection
 

@@ -376,7 +376,7 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-服务默认以非 root 用户运行（可在 `install.sh` 中配置），崩溃后自动重启。
+服务默认以 `root` 用户运行。如需更换运行用户，安装前修改 `install.sh` 顶部的 `RUN_USER` 变量即可。服务崩溃后自动重启。
 
 ## 端点变更检测
 
