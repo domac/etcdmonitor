@@ -488,7 +488,7 @@
 </div>
 
 <!-- Create Key Dialog -->
-<div class="kv-dialog-overlay" id="kvCreateDialog" style="display:none" onclick="if(event.target===this)kvCloseCreateDialog()">
+<div class="kv-dialog-overlay" id="kvCreateDialog" style="display:none">
     <div class="kv-dialog">
         <div class="kv-dialog-header">
             <span class="kv-dialog-title" id="kvCreateDialogTitle">New Key</span>
@@ -498,14 +498,14 @@
             <div class="kv-form-group">
                 <label>Key</label>
                 <div class="kv-create-path" id="kvCreatePrefix" title=""></div>
-                <input type="text" id="kvCreateKey" class="kv-input" placeholder="Enter key name" onkeydown="if(event.key==='Enter'){event.preventDefault();kvSubmitCreate()}">
+                <input type="text" id="kvCreateKey" class="kv-input" placeholder="Enter key name" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();kvSubmitCreate()}">
             </div>
             <div class="kv-form-group" id="kvCreateDirGroup">
                 <label><input type="checkbox" id="kvCreateIsDir" onchange="kvToggleDirMode()"> Directory</label>
             </div>
             <div class="kv-form-group">
                 <label>TTL (seconds, optional)</label>
-                <input type="number" id="kvCreateTTL" class="kv-input" placeholder="0 = no expiry" min="0">
+                <input type="number" id="kvCreateTTL" class="kv-input" placeholder="0 = no expiry" min="0" autocomplete="off">
             </div>
             <div class="kv-form-group" id="kvCreateValueGroup">
                 <label>Value</label>
@@ -520,7 +520,7 @@
 </div>
 
 <!-- Delete Confirm Dialog -->
-<div class="kv-dialog-overlay" id="kvDeleteDialog" style="display:none" onclick="if(event.target===this)kvCloseDeleteDialog()">
+<div class="kv-dialog-overlay" id="kvDeleteDialog" style="display:none">
     <div class="kv-dialog">
         <div class="kv-dialog-header">
             <span class="kv-dialog-title">Confirm Delete</span>

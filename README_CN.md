@@ -390,54 +390,6 @@ sudo ./uninstall.sh
 
 移除 systemd 服务。可选删除数据和日志（交互式确认）。二进制文件和配置保留以便重新安装。
 
-## 项目结构
-
-```
-etcdmonitor/
-├── cmd/etcdmonitor/
-│   └── main.go                 # 入口，Gin 引擎，日志
-├── internal/
-│   ├── config/config.go        # 配置加载与默认值
-│   ├── health/manager.go       # 全局健康端点管理
-│   ├── tls/tls.go              # etcd 客户端 TLS/mTLS 配置加载器
-│   ├── collector/
-│   │   ├── collector.go        # 并发指标采集引擎
-│   │   ├── member.go           # 集群成员发现（etcd v3 SDK）
-│   │   └── parser.go           # Prometheus 文本格式解析器
-│   ├── storage/storage.go      # SQLite 时序存储与降采样
-│   ├── auth/
-│   │   ├── auth.go             # 会话管理与令牌处理
-│   │   ├── detector.go         # 启动时自动检测 etcd 认证状态
-│   │   └── handler.go          # 登录/登出/状态 API 处理器
-│   ├── kvmanager/
-│   │   ├── client_v3.go        # etcd v3 KV 操作（按请求连接）
-│   │   ├── client_v2.go        # etcd v2 KV 操作
-│   │   ├── handler.go          # KV REST API 处理器（CRUD + 树）
-│   │   └── types.go            # Node、请求/响应类型
-│   ├── prefs/
-│   │   └── prefs.go            # 按用户面板配置（JSON 文件存储）
-│   ├── api/
-│   │   ├── api.go              # Gin 路由、中间件与面板配置处理器
-│   │   └── handler.go          # REST API 处理器
-│   └── logger/logger.go        # Zap 日志与日志轮转
-├── web/                        # 内嵌前端（HTML/CSS/JS + ECharts）
-│   ├── index.html              # Dashboard 页面（监控 + KV 树管理）
-│   ├── login.html              # 登录页面（etcd 启用认证时显示）
-│   ├── app.js                  # Dashboard 逻辑、图表、面板配置
-│   ├── kv.js                   # KV 树管理（树视图、CRUD、ACE 编辑器）
-│   ├── style.css               # 深色/浅色主题样式
-│   └── vendor/                 # ACE 编辑器（语法高亮、主题）
-├── certs/                      # TLS 证书（生成后 git-ignored）
-├── embed.go                    # go:embed 嵌入 web 资源
-├── config.yaml                 # 默认配置
-├── gen-certs.sh                # TLS 证书生成脚本
-├── build.sh                    # 构建脚本
-├── package.sh                  # 打包脚本（构建 + zip）
-├── install.sh                  # 一键安装（systemd）
-├── uninstall.sh                # 一键卸载
-└── version                     # 版本文件（构建脚本读取）
-```
-
 ## API 参考
 
 ### Dashboard API

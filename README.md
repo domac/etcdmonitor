@@ -390,54 +390,6 @@ sudo ./uninstall.sh
 
 Removes the systemd service. Optionally deletes data and logs (interactive prompt). Binary and config are preserved for re-installation.
 
-## Project Structure
-
-```
-etcdmonitor/
-├── cmd/etcdmonitor/
-│   └── main.go                 # Entry point, Gin engine, logger
-├── internal/
-│   ├── config/config.go        # Configuration loading & defaults
-│   ├── health/manager.go       # Global healthy endpoint management
-│   ├── tls/tls.go              # etcd client TLS/mTLS configuration loader
-│   ├── collector/
-│   │   ├── collector.go        # Concurrent metrics collection engine
-│   │   ├── member.go           # Cluster member discovery (etcd v3 SDK)
-│   │   └── parser.go           # Prometheus text format parser
-│   ├── storage/storage.go      # SQLite time-series storage with downsampling
-│   ├── auth/
-│   │   ├── auth.go             # Session management & token handling
-│   │   ├── detector.go         # Auto-detect etcd auth status at startup
-│   │   └── handler.go          # Login/logout/status API handlers
-│   ├── kvmanager/
-│   │   ├── client_v3.go        # etcd v3 KV operations (per-request client)
-│   │   ├── client_v2.go        # etcd v2 KV operations
-│   │   ├── handler.go          # KV REST API handlers (CRUD + tree)
-│   │   └── types.go            # Node, request/response types
-│   ├── prefs/
-│   │   └── prefs.go            # Per-user panel config (JSON file store)
-│   ├── api/
-│   │   ├── api.go              # Gin router, middleware & panel-config handler
-│   │   └── handler.go          # REST API handlers
-│   └── logger/logger.go        # Zap logger with rotation
-├── web/                        # Embedded frontend (HTML/CSS/JS + ECharts)
-│   ├── index.html              # Dashboard page (Monitor + KV Tree)
-│   ├── login.html              # Login page (shown when etcd auth enabled)
-│   ├── app.js                  # Dashboard logic, charts, panel config
-│   ├── kv.js                   # KV Tree management (tree view, CRUD, ACE Editor)
-│   ├── style.css               # Dark/light theme styles
-│   └── vendor/                 # ACE Editor (syntax highlighting, themes)
-├── certs/                      # TLS certificates (generated, git-ignored)
-├── embed.go                    # go:embed for web assets
-├── config.yaml                 # Default configuration
-├── gen-certs.sh                # TLS certificate generator
-├── build.sh                    # Build script
-├── package.sh                  # Package script (build + zip)
-├── install.sh                  # One-click install (systemd)
-├── uninstall.sh                # One-click uninstall
-└── version                     # Version file (read by build scripts)
-```
-
 ## API Reference
 
 ### Dashboard APIs
