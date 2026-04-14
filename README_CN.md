@@ -112,12 +112,17 @@ kv_manager:
   separator: "/"                            # KV 树视图路径分隔符
   connect_timeout: 5                        # etcd 连接超时（秒）
   request_timeout: 30                       # etcd 请求超时（秒）
+  max_value_size: 2097152                   # 最大 value 大小（字节），默认 2MB
 
 log:
   dir: "logs"
-  level: "info"
-  max_size_mb: 50
-  max_files: 5
+  filename: "etcdmonitor.log"
+  level: "info"                             # debug, info, warn, error
+  max_size_mb: 50                           # 单个日志文件最大大小（MB）
+  max_files: 5                              # 保留日志文件个数
+  max_age: 30                               # 旧日志保留天数（0 = 不按天数清理）
+  compress: false                           # 是否压缩归档旧日志（gzip）
+  console: true                             # 是否同时输出到控制台
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -137,10 +142,20 @@ log:
 | `server.tls_key` | TLS 私钥文件路径 | `certs/server.key` |
 | `server.session_timeout` | Dashboard 登录会话超时（秒），0 表示不过期 | `3600` |
 | `collector.interval` | 指标采集间隔（秒） | `30` |
+| `storage.db_path` | SQLite 数据库文件路径 | `data/etcdmonitor.db` |
 | `storage.retention_days` | 数据保留周期（天） | `7` |
 | `kv_manager.separator` | KV 树视图的路径分隔符 | `/` |
 | `kv_manager.connect_timeout` | KV 操作的 etcd 连接超时（秒） | `5` |
 | `kv_manager.request_timeout` | KV 操作的 etcd 请求超时（秒） | `30` |
+| `kv_manager.max_value_size` | KV 操作最大 value 大小（字节） | `2097152`（2MB） |
+| `log.dir` | 日志文件目录 | `logs` |
+| `log.filename` | 日志文件名 | `etcdmonitor.log` |
+| `log.level` | 日志级别：debug, info, warn, error | `info` |
+| `log.max_size_mb` | 单个日志文件最大大小（MB），超过自动切割 | `50` |
+| `log.max_files` | 保留日志文件个数 | `5` |
+| `log.max_age` | 旧日志保留天数（0 = 不按天数清理，仅按文件数控制） | `30` |
+| `log.compress` | 是否压缩归档旧日志（gzip） | `false` |
+| `log.console` | 是否同时输出到控制台 | `true` |
 
 ## 架构
 

@@ -112,12 +112,17 @@ kv_manager:
   separator: "/"                            # Key path separator for tree view
   connect_timeout: 5                        # etcd connection timeout (seconds)
   request_timeout: 30                       # etcd request timeout (seconds)
+  max_value_size: 2097152                   # Max value size in bytes (default 2MB)
 
 log:
   dir: "logs"
-  level: "info"
-  max_size_mb: 50
-  max_files: 5
+  filename: "etcdmonitor.log"
+  level: "info"                             # debug, info, warn, error
+  max_size_mb: 50                           # Max single log file size (MB)
+  max_files: 5                              # Max number of log files to keep
+  max_age: 30                               # Max days to retain old logs (0 = no age limit)
+  compress: false                           # Compress rotated log files (gzip)
+  console: true                             # Also output to console
 ```
 
 | Parameter | Description | Default |
@@ -137,10 +142,20 @@ log:
 | `server.tls_key` | TLS private key file path | `certs/server.key` |
 | `server.session_timeout` | Dashboard login session timeout (seconds), 0 = no expiry | `3600` |
 | `collector.interval` | Metrics collection interval (seconds) | `30` |
+| `storage.db_path` | SQLite database file path | `data/etcdmonitor.db` |
 | `storage.retention_days` | Data retention period (days) | `7` |
 | `kv_manager.separator` | Key path separator for KV tree view | `/` |
 | `kv_manager.connect_timeout` | etcd connection timeout for KV operations (seconds) | `5` |
 | `kv_manager.request_timeout` | etcd request timeout for KV operations (seconds) | `30` |
+| `kv_manager.max_value_size` | Max value size for KV operations (bytes) | `2097152` (2MB) |
+| `log.dir` | Log file directory | `logs` |
+| `log.filename` | Log file name | `etcdmonitor.log` |
+| `log.level` | Log level: debug, info, warn, error | `info` |
+| `log.max_size_mb` | Max single log file size before rotation (MB) | `50` |
+| `log.max_files` | Max number of rotated log files to keep | `5` |
+| `log.max_age` | Max days to retain old log files (0 = no age limit) | `30` |
+| `log.compress` | Compress rotated log files with gzip | `false` |
+| `log.console` | Also output logs to console (stdout) | `true` |
 
 ## Architecture
 
