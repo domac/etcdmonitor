@@ -10,6 +10,7 @@ import (
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/storage"
+	"etcdmonitor/internal/tls"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -45,9 +46,28 @@ func New(cfg *config.Config, store *storage.Storage, healthMgr *health.Manager) 
 		etcdCfg.Password = cfg.Etcd.Password
 	}
 
+	// 应用 TLS 配置
+	tlsCfg, err := tls.LoadClientTLSConfig(cfg)
+	if err != nil {
+		logger.Errorf("[Collector] Failed to load TLS configuration: %v", err)
+	} else if tlsCfg != nil {
+		etcdCfg.TLS = tlsCfg
+	}
+
 	etcdClient, err := clientv3.New(etcdCfg)
 	if err != nil {
 		logger.Errorf("[Collector] Failed to create etcd SDK client: %v, member discovery may fail", err)
+	}
+
+	// 创建 HTTP 客户端，用于采集 /metrics（如果启用了 TLS，需要携带客户端证书）
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	if tlsCfg != nil {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: tlsCfg,
+		}
+		logger.Info("[Collector] HTTP client configured with TLS for /metrics collection")
 	}
 
 	return &Collector{
@@ -55,9 +75,7 @@ func New(cfg *config.Config, store *storage.Storage, healthMgr *health.Manager) 
 		store:      store,
 		etcdClient: etcdClient,
 		healthMgr:  healthMgr,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		client:     httpClient,
 		latest: make(map[string]map[string]float64),
 		prev:   make(map[string]map[string]float64),
 		prevTs: make(map[string]time.Time),

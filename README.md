@@ -35,6 +35,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
 - **Dark / Light theme** - Toggle with one click, preference saved in browser
 - **HTTPS support** - Optional TLS with bundled self-signed certificates, or bring your own
+- **etcd TLS/mTLS** - Connect to TLS-secured etcd clusters with client certificates (CA + cert + key)
 - **Auto downsampling** - Smart query aggregation keeps dashboard responsive even with 7 days of data
 - **One-click deploy** - `install.sh` sets up systemd service, `uninstall.sh` cleans up
 - **Smart endpoint detection** - Supports `127.0.0.1` config, auto-resolves to real member ID
@@ -86,6 +87,12 @@ etcd:
   username: ""                              # Collector credentials (leave empty if no auth)
   password: ""
   metrics_path: "/metrics"
+  tls_enable: false                         # true: connect to etcd via TLS
+  tls_cert: "certs/client.crt"              # Client certificate (for mTLS)
+  tls_key: "certs/client.key"               # Client private key (for mTLS)
+  tls_ca_cert: "certs/ca.crt"              # CA certificate (to verify etcd server)
+  tls_insecure_skip_verify: false           # Skip server cert verification (testing only)
+  tls_server_name: ""                       # Server name for SNI verification
 
 server:
   listen: ":9090"
@@ -118,6 +125,12 @@ log:
 | `etcd.endpoint` | etcd client endpoint (comma-separated for multi-endpoint failover) | `http://127.0.0.1:2379` |
 | `etcd.username` | Collector auth username (leave empty if no auth) | - |
 | `etcd.password` | Collector auth password | - |
+| `etcd.tls_enable` | Enable TLS for etcd client connections | `false` |
+| `etcd.tls_cert` | Client certificate file path (for mTLS) | `certs/client.crt` |
+| `etcd.tls_key` | Client private key file path (for mTLS) | `certs/client.key` |
+| `etcd.tls_ca_cert` | CA certificate file path (to verify etcd server) | `certs/ca.crt` |
+| `etcd.tls_insecure_skip_verify` | Skip server certificate verification (testing only) | `false` |
+| `etcd.tls_server_name` | Server name for SNI verification | - |
 | `server.listen` | Dashboard listen address | `:9090` |
 | `server.tls_enable` | Enable HTTPS | `false` |
 | `server.tls_cert` | TLS certificate file path | `certs/server.crt` |
@@ -199,6 +212,8 @@ log:
 
 ## HTTPS / TLS
 
+### Dashboard HTTPS
+
 The install package includes a self-signed TLS certificate (valid for 10 years). To enable HTTPS:
 
 ```yaml
@@ -228,6 +243,48 @@ systemctl restart etcdmonitor
 ```
 
 > Self-signed certificates will trigger a browser warning. Click "Advanced" > "Proceed" to continue, or use a certificate from a trusted CA for production.
+
+### etcd Client TLS (mTLS)
+
+If your etcd cluster is deployed with TLS (`client-transport-security` with `client-cert-auth: true`), etcd Monitor supports connecting via client certificates.
+
+**Configuration:**
+
+```yaml
+etcd:
+  endpoint: "https://10.0.1.1:2379,https://10.0.1.2:2379,https://10.0.1.3:2379"
+  tls_enable: true
+  tls_cert: "certs/etcd-client.pem"         # Client certificate
+  tls_key: "certs/etcd-client-key.pem"      # Client private key
+  tls_ca_cert: "certs/ca.pem"               # CA certificate
+```
+
+**Setup steps:**
+
+```bash
+# Copy etcd client certificates to the etcdmonitor certs directory
+cp /etc/etcd/ssl/etcd-client.pem certs/etcd-client.pem
+cp /etc/etcd/ssl/etcd-client-key.pem certs/etcd-client-key.pem
+cp /etc/etcd/ssl/ca.pem certs/ca.pem
+
+# Edit config.yaml (set tls_enable: true and certificate paths)
+vim config.yaml
+
+# Restart the service
+systemctl restart etcdmonitor
+```
+
+**Supported scenarios:**
+
+| Scenario | `tls_enable` | `tls_cert` / `tls_key` | `tls_ca_cert` | `username` / `password` |
+|---|---|---|---|---|
+| Plain HTTP (no auth) | `false` | - | - | - |
+| Plain HTTP + password auth | `false` | - | - | ✅ |
+| HTTPS + CA only (server verification) | `true` | - | ✅ | Optional |
+| HTTPS + mTLS (client cert) | `true` | ✅ | ✅ | Optional |
+| HTTPS + mTLS + password auth | `true` | ✅ | ✅ | ✅ |
+
+> **Note:** When `tls_enable: true`, the endpoint must use `https://`. TLS is applied to all etcd connections: health probes, metrics collection, member discovery, KV management, and authentication.
 
 ## Multi-Member Cluster Support
 
@@ -338,10 +395,11 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 ```
 etcdmonitor/
 ├── cmd/etcdmonitor/
-│   └── main.go                 # Entry point, HTTP/HTTPS server, logger
+│   └── main.go                 # Entry point, Gin engine, logger
 ├── internal/
 │   ├── config/config.go        # Configuration loading & defaults
 │   ├── health/manager.go       # Global healthy endpoint management
+│   ├── tls/tls.go              # etcd client TLS/mTLS configuration loader
 │   ├── collector/
 │   │   ├── collector.go        # Concurrent metrics collection engine
 │   │   ├── member.go           # Cluster member discovery (etcd v3 SDK)
@@ -350,7 +408,7 @@ etcdmonitor/
 │   ├── auth/
 │   │   ├── auth.go             # Session management & token handling
 │   │   ├── detector.go         # Auto-detect etcd auth status at startup
-│   │   └── handler.go          # Login/logout/status HTTP handlers
+│   │   └── handler.go          # Login/logout/status API handlers
 │   ├── kvmanager/
 │   │   ├── client_v3.go        # etcd v3 KV operations (per-request client)
 │   │   ├── client_v2.go        # etcd v2 KV operations
@@ -359,7 +417,7 @@ etcdmonitor/
 │   ├── prefs/
 │   │   └── prefs.go            # Per-user panel config (JSON file store)
 │   ├── api/
-│   │   ├── api.go              # Router, middleware & panel-config handler
+│   │   ├── api.go              # Gin router, middleware & panel-config handler
 │   │   └── handler.go          # REST API handlers
 │   └── logger/logger.go        # Zap logger with rotation
 ├── web/                        # Embedded frontend (HTML/CSS/JS + ECharts)

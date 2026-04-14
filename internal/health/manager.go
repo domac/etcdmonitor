@@ -2,18 +2,20 @@ package health
 
 import (
 	"context"
+	"crypto/tls"
 	"sync"
 	"time"
 
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/logger"
+	etcdtls "etcdmonitor/internal/tls"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
-	probeTimeout     = 3 * time.Second
-	checkInterval    = 15 * time.Second
+	probeTimeout      = 3 * time.Second
+	checkInterval     = 15 * time.Second
 	statusCallTimeout = 3 * time.Second
 )
 
@@ -23,6 +25,7 @@ const (
 type Manager struct {
 	cfg          *config.Config
 	allEndpoints []string // 配置的全部地址（不变）
+	tlsCfg       *tls.Config // 缓存 TLS 配置
 
 	mu      sync.RWMutex
 	healthy []string // 当前可用地址，保持 config 原始顺序
@@ -36,9 +39,17 @@ type Manager struct {
 func New(cfg *config.Config) (*Manager, error) {
 	allEps := cfg.EtcdEndpoints()
 
+	// 加载 TLS 配置
+	tlsCfg, err := etcdtls.LoadClientTLSConfig(cfg)
+	if err != nil {
+		logger.Errorf("[Health] Failed to load TLS configuration: %v", err)
+		return nil, err
+	}
+
 	m := &Manager{
 		cfg:          cfg,
 		allEndpoints: allEps,
+		tlsCfg:       tlsCfg,
 		stop:         make(chan struct{}),
 	}
 
@@ -214,6 +225,11 @@ func (m *Manager) probeEndpoint(endpoint string) bool {
 	if m.cfg.Etcd.Username != "" {
 		etcdCfg.Username = m.cfg.Etcd.Username
 		etcdCfg.Password = m.cfg.Etcd.Password
+	}
+
+	// 应用 TLS 配置
+	if m.tlsCfg != nil {
+		etcdCfg.TLS = m.tlsCfg
 	}
 
 	cli, err := clientv3.New(etcdCfg)

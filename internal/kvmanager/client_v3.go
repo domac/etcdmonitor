@@ -8,6 +8,8 @@ import (
 
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
+	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/tls"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -43,6 +45,15 @@ func (c *ClientV3) newClient() (*clientv3.Client, error) {
 		etcdCfg.Username = c.cfg.Etcd.Username
 		etcdCfg.Password = c.cfg.Etcd.Password
 	}
+
+	// 应用 TLS 配置
+	tlsCfg, err := tls.LoadClientTLSConfig(c.cfg)
+	if err != nil {
+		logger.Errorf("[KVManager] Failed to load TLS configuration: %v", err)
+	} else if tlsCfg != nil {
+		etcdCfg.TLS = tlsCfg
+	}
+
 	return clientv3.New(etcdCfg)
 }
 

@@ -11,10 +11,16 @@ import (
 // Config 应用配置结构
 type Config struct {
 	Etcd struct {
-		Endpoint        string `yaml:"endpoint"`
-		Username        string `yaml:"username"`
-		Password        string `yaml:"password"`
-		MetricsPath     string `yaml:"metrics_path"`
+		Endpoint              string `yaml:"endpoint"`
+		Username              string `yaml:"username"`
+		Password              string `yaml:"password"`
+		MetricsPath           string `yaml:"metrics_path"`
+		TLSEnable             bool   `yaml:"tls_enable"`
+		TLSCert               string `yaml:"tls_cert"`
+		TLSKey                string `yaml:"tls_key"`
+		TLSCACert             string `yaml:"tls_ca_cert"`
+		TLSInsecureSkipVerify bool   `yaml:"tls_insecure_skip_verify"`
+		TLSServerName         string `yaml:"tls_server_name"`
 	} `yaml:"etcd"`
 
 	Server struct {
@@ -72,6 +78,17 @@ func Load(path string) (*Config, error) {
 	if cfg.Etcd.MetricsPath == "" {
 		cfg.Etcd.MetricsPath = "/metrics"
 	}
+	// 默认 etcd 客户端 TLS 证书路径
+	if cfg.Etcd.TLSCert == "" && cfg.Etcd.TLSEnable {
+		cfg.Etcd.TLSCert = "certs/client.crt"
+	}
+	if cfg.Etcd.TLSKey == "" && cfg.Etcd.TLSEnable {
+		cfg.Etcd.TLSKey = "certs/client.key"
+	}
+	if cfg.Etcd.TLSCACert == "" && cfg.Etcd.TLSEnable {
+		cfg.Etcd.TLSCACert = "certs/ca.crt"
+	}
+
 	if cfg.Server.Listen == "" {
 		cfg.Server.Listen = ":9090"
 	}

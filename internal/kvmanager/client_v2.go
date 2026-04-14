@@ -3,12 +3,15 @@ package kvmanager
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
 
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
+	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/tls"
 
 	clientv2 "go.etcd.io/etcd/client/v2"
 )
@@ -32,7 +35,17 @@ func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, erro
 		available: false,
 	}
 
-	transport := clientv2.DefaultTransport
+	// 加载 TLS 配置并应用到 HTTP Transport
+	tlsCfg, err := tls.LoadClientTLSConfig(cfg)
+	if err != nil {
+		logger.Errorf("[KVManager] Failed to load TLS configuration: %v", err)
+	}
+
+	// 创建自定义 HTTP Transport，支持 TLS
+	transport := &http.Transport{
+		TLSClientConfig: tlsCfg,
+		// 保留 HTTP/1.1 连接使用默认的超时和连接池设置
+	}
 
 	etcdCfg := clientv2.Config{
 		Endpoints:               healthMgr.HealthyEndpoints(),
@@ -47,6 +60,7 @@ func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, erro
 	client, err := clientv2.New(etcdCfg)
 	if err != nil {
 		// v2 创建失败不阻断启动，标记为不可用
+		logger.Warnf("[KVManager] etcd v2 client creation failed: %v", err)
 		return c, nil
 	}
 
