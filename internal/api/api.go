@@ -4,13 +4,18 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/collector"
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
+	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
+
+	"github.com/gin-gonic/gin"
 )
 
 // API 提供 REST 接口给前端 Dashboard
@@ -22,6 +27,7 @@ type API struct {
 	authRequired bool
 	sessionStore *auth.MemorySessionStore
 	prefsStore   *prefs.FileStore
+	authHandler  *auth.AuthHandler
 }
 
 // New 创建 API 实例
@@ -34,54 +40,31 @@ func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, hea
 		authRequired: authRequired,
 		sessionStore: sessionStore,
 		prefsStore:   prefsStore,
+		authHandler:  auth.NewAuthHandler(cfg, sessionStore, healthMgr, authRequired),
 	}
 }
 
-// SetupRoutes 注册路由
-func (a *API) SetupRoutes(mux *http.ServeMux) {
+// SetupRoutes 注册路由到 Gin Engine
+func (a *API) SetupRoutes(router *gin.Engine) *gin.RouterGroup {
 	// 公开路由（不受认证中间件保护）
-	mux.HandleFunc("/api/auth/login", a.securityHeaders(auth.HandleLogin(a.cfg, a.sessionStore, a.healthMgr)))
-	mux.HandleFunc("/api/auth/status", a.securityHeaders(auth.HandleAuthStatus(a.sessionStore, a.authRequired)))
+	router.POST("/api/auth/login", a.authHandler.HandleLogin)
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
 
-	// 受保护路由（认证模式下需要有效会话）
-	mux.HandleFunc("/api/auth/logout", a.securityHeaders(a.authMiddleware(auth.HandleLogout(a.sessionStore))))
-	mux.HandleFunc("/api/members", a.securityHeaders(a.authMiddleware(a.handleMembers)))
-	mux.HandleFunc("/api/current", a.securityHeaders(a.authMiddleware(a.handleCurrent)))
-	mux.HandleFunc("/api/range", a.securityHeaders(a.authMiddleware(a.handleRange)))
-	mux.HandleFunc("/api/status", a.securityHeaders(a.authMiddleware(a.handleStatus)))
-	mux.HandleFunc("/api/debug", a.securityHeaders(a.authMiddleware(a.handleDebug)))
-	mux.HandleFunc("/api/user/panel-config", a.securityHeaders(a.authMiddleware(a.handlePanelConfig)))
-}
-
-// AuthMiddleware 返回认证中间件（供 KV 管理等外部模块使用）
-func (a *API) AuthMiddleware() func(http.HandlerFunc) http.HandlerFunc {
-	return a.authMiddleware
-}
-
-// SecurityHeaders 返回安全头中间件（供 KV 管理等外部模块使用）
-func (a *API) SecurityHeaders() func(http.HandlerFunc) http.HandlerFunc {
-	return a.securityHeaders
-}
-
-// authMiddleware 认证中间件
-// authRequired=false 时直接放行；否则从 Cookie 或 Authorization header 获取 token
-func (a *API) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !a.authRequired {
-			next(w, r)
-			return
-		}
-
-		token := auth.ExtractToken(r)
-		if token == "" || !a.sessionStore.IsValid(token) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "未认证"})
-			return
-		}
-
-		next(w, r)
+	// 受保护路由组（认证模式下需要有效会话）
+	protected := router.Group("/api")
+	protected.Use(a.authMiddleware())
+	{
+		protected.POST("/auth/logout", a.authHandler.HandleLogout)
+		protected.GET("/members", a.handleMembers)
+		protected.GET("/current", a.handleCurrent)
+		protected.GET("/range", a.handleRange)
+		protected.GET("/status", a.handleStatus)
+		protected.GET("/debug", a.handleDebug)
+		protected.GET("/user/panel-config", a.handleGetPanelConfig)
+		protected.PUT("/user/panel-config", a.handlePutPanelConfig)
 	}
+
+	return protected
 }
 
 // AuthRequired 返回是否需要认证（供外部使用）
@@ -89,24 +72,85 @@ func (a *API) AuthRequired() bool {
 	return a.authRequired
 }
 
-// securityHeaders wraps a handler to add security response headers.
-func (a *API) securityHeaders(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
-		if a.cfg.Server.TLSEnable {
-			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+// SecurityHeadersMiddleware 返回安全头 Gin 中间件（全局挂载）
+func SecurityHeadersMiddleware(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		if cfg.Server.TLSEnable {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
-		next(w, r)
+		c.Next()
+	}
+}
+
+// GinZapLogger 返回自定义请求日志 Gin 中间件，使用项目的 Zap logger
+func GinZapLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 跳过静态文件请求的日志记录
+		path := c.Request.URL.Path
+		if !strings.HasPrefix(path, "/api/") {
+			c.Next()
+			return
+		}
+
+		start := time.Now()
+		if c.Request.URL.RawQuery != "" {
+			path = path + "?" + c.Request.URL.RawQuery
+		}
+
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		method := c.Request.Method
+
+		if status >= 400 {
+			logger.Warnf("[HTTP] %s %s %d %s client=%s", method, path, status, latency, c.ClientIP())
+		} else {
+			logger.Infof("[HTTP] %s %s %d %s", method, path, status, latency)
+		}
+	}
+}
+
+// GinRecovery 返回自定义 Recovery 中间件，panic 后写入 Zap
+func GinRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Errorf("[HTTP] panic recovered: %v", err)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			}
+		}()
+		c.Next()
+	}
+}
+
+// authMiddleware 返回认证 Gin 中间件
+// authRequired=false 时直接放行；否则从 Cookie 或 Authorization header 获取 token
+func (a *API) authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !a.authRequired {
+			c.Next()
+			return
+		}
+
+		token := auth.ExtractToken(c.Request)
+		if token == "" || !a.sessionStore.IsValid(token) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			return
+		}
+
+		c.Next()
 	}
 }
 
 // resolveMemberID 从请求中解析 member_id，不传则用默认
-func (a *API) resolveMemberID(r *http.Request) string {
-	memberID := r.URL.Query().Get("member_id")
+func (a *API) resolveMemberID(c *gin.Context) string {
+	memberID := c.Query("member_id")
 	if memberID == "" {
 		memberID = a.collector.GetDefaultMemberID()
 	}
@@ -114,8 +158,8 @@ func (a *API) resolveMemberID(r *http.Request) string {
 }
 
 // getUsername 从请求的 token 中获取用户名
-func (a *API) getUsername(r *http.Request) string {
-	token := auth.ExtractToken(r)
+func (a *API) getUsername(c *gin.Context) string {
+	token := auth.ExtractToken(c.Request)
 	if token == "" {
 		return ""
 	}
@@ -126,61 +170,50 @@ func (a *API) getUsername(r *http.Request) string {
 	return session.Username
 }
 
-// handlePanelConfig 处理面板配置的读取和保存
-func (a *API) handlePanelConfig(w http.ResponseWriter, r *http.Request) {
-	// 免认证模式下，前端应使用 localStorage，但后端仍返回默认配置
-	username := a.getUsername(r)
+// handleGetPanelConfig 处理面板配置的读取
+func (a *API) handleGetPanelConfig(c *gin.Context) {
+	username := a.getUsername(c)
 	if username == "" && a.authRequired {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "未认证"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 		return
 	}
 
-	switch r.Method {
-	case http.MethodGet:
-		if username == "" {
-			// 免认证模式返回默认配置
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(prefs.DefaultConfig())
-			return
-		}
-		cfg, err := a.prefsStore.Load(username)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "load config failed"})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(cfg)
-
-	case http.MethodPut:
-		if username == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "no user identity"})
-			return
-		}
-
-		var cfg prefs.PanelConfig
-		if err := json.NewDecoder(io.LimitReader(r.Body, 64*1024)).Decode(&cfg); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
-			return
-		}
-
-		if err := a.prefsStore.Save(username, &cfg); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "save config failed"})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
-
-	default:
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	if username == "" {
+		// 免认证模式返回默认配置
+		c.JSON(http.StatusOK, prefs.DefaultConfig())
+		return
 	}
+
+	cfg, err := a.prefsStore.Load(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "load config failed"})
+		return
+	}
+	c.JSON(http.StatusOK, cfg)
+}
+
+// handlePutPanelConfig 处理面板配置的保存
+func (a *API) handlePutPanelConfig(c *gin.Context) {
+	username := a.getUsername(c)
+	if username == "" && a.authRequired {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no user identity"})
+		return
+	}
+
+	var cfg prefs.PanelConfig
+	if err := json.NewDecoder(io.LimitReader(c.Request.Body, 64*1024)).Decode(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+
+	if err := a.prefsStore.Save(username, &cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "save config failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "ok"})
 }

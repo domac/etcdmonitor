@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -22,6 +23,8 @@ import (
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Version 版本号，构建时通过 -ldflags 注入
@@ -100,19 +103,28 @@ func main() {
 	prefsStore := prefs.NewFileStore(prefsDir)
 	logger.Infof("User preferences directory: %s", prefsDir)
 
-	// 初始化 API
-	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore)
+	// 初始化 Gin Engine
+	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = io.Discard
+	gin.DefaultErrorWriter = io.Discard
 
-	// 设置 HTTP 路由
-	mux := http.NewServeMux()
-	a.SetupRoutes(mux)
+	router := gin.New()
+
+	// 全局中间件：Recovery → Logger → SecurityHeaders
+	router.Use(api.GinRecovery())
+	router.Use(api.GinZapLogger())
+	router.Use(api.SecurityHeadersMiddleware(cfg))
+
+	// 初始化 API 并注册路由
+	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore)
+	protected := a.SetupRoutes(router)
 
 	// 初始化 KV 管理模块
 	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr)
 	if err != nil {
 		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
 	} else {
-		kvHandler.RegisterRoutes(mux, a.AuthMiddleware(), a.SecurityHeaders())
+		kvHandler.RegisterRoutes(protected)
 		defer kvHandler.Close()
 		logger.Info("KV manager initialized")
 	}
@@ -122,12 +134,12 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Setup web fs: %v", err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(webContent)))
+	router.NoRoute(gin.WrapH(http.FileServer(http.FS(webContent))))
 
 	// 启动 HTTP/HTTPS 服务
 	server := &http.Server{
 		Addr:              cfg.Server.Listen,
-		Handler:           mux,
+		Handler:           router,
 		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,

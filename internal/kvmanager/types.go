@@ -29,7 +29,7 @@ type ConnectInfo struct {
 
 // PutRequest 是 put 接口的请求结构
 type PutRequest struct {
-	Key   string `json:"key"`
+	Key   string `json:"key" binding:"required"`
 	Value string `json:"value"`
 	TTL   int64  `json:"ttl,omitempty"`
 	Dir   bool   `json:"dir,omitempty"`
@@ -37,7 +37,7 @@ type PutRequest struct {
 
 // DeleteRequest 是 delete 接口的请求结构
 type DeleteRequest struct {
-	Key string `json:"key"`
+	Key string `json:"key" binding:"required"`
 	Dir bool   `json:"dir"`
 }
 

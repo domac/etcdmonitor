@@ -1,15 +1,14 @@
 package kvmanager
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
@@ -50,179 +49,137 @@ func (h *KVHandler) Close() {
 	}
 }
 
-// RegisterRoutes 注册 KV 管理路由
-func (h *KVHandler) RegisterRoutes(mux *http.ServeMux, authMiddleware func(http.HandlerFunc) http.HandlerFunc, securityHeaders func(http.HandlerFunc) http.HandlerFunc) {
+// RegisterRoutes 注册 KV 管理路由到 Gin 路由组
+func (h *KVHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	// V3 路由
-	mux.HandleFunc("/api/kv/v3/connect", securityHeaders(authMiddleware(h.handleV3Connect)))
-	mux.HandleFunc("/api/kv/v3/get", securityHeaders(authMiddleware(h.handleV3Get)))
-	mux.HandleFunc("/api/kv/v3/getpath", securityHeaders(authMiddleware(h.handleV3GetPath)))
-	mux.HandleFunc("/api/kv/v3/put", securityHeaders(authMiddleware(h.handleV3Put)))
-	mux.HandleFunc("/api/kv/v3/delete", securityHeaders(authMiddleware(h.handleV3Delete)))
-	mux.HandleFunc("/api/kv/v3/separator", securityHeaders(authMiddleware(h.handleV3Separator)))
-	mux.HandleFunc("/api/kv/v3/keys", securityHeaders(authMiddleware(h.handleV3Keys)))
+	v3 := rg.Group("/kv/v3")
+	{
+		v3.POST("/connect", h.handleV3Connect)
+		v3.GET("/connect", h.handleV3Connect)
+		v3.GET("/get", h.handleV3Get)
+		v3.GET("/getpath", h.handleV3GetPath)
+		v3.PUT("/put", h.handleV3Put)
+		v3.POST("/delete", h.handleV3Delete)
+		v3.GET("/separator", h.handleV3Separator)
+		v3.GET("/keys", h.handleV3Keys)
+	}
 
 	// V2 路由
-	mux.HandleFunc("/api/kv/v2/connect", securityHeaders(authMiddleware(h.handleV2Connect)))
-	mux.HandleFunc("/api/kv/v2/get", securityHeaders(authMiddleware(h.handleV2Get)))
-	mux.HandleFunc("/api/kv/v2/getpath", securityHeaders(authMiddleware(h.handleV2GetPath)))
-	mux.HandleFunc("/api/kv/v2/put", securityHeaders(authMiddleware(h.handleV2Put)))
-	mux.HandleFunc("/api/kv/v2/delete", securityHeaders(authMiddleware(h.handleV2Delete)))
-	mux.HandleFunc("/api/kv/v2/separator", securityHeaders(authMiddleware(h.handleV2Separator)))
-	mux.HandleFunc("/api/kv/v2/keys", securityHeaders(authMiddleware(h.handleV2Keys)))
+	v2 := rg.Group("/kv/v2")
+	{
+		v2.POST("/connect", h.handleV2Connect)
+		v2.GET("/connect", h.handleV2Connect)
+		v2.GET("/get", h.handleV2Get)
+		v2.GET("/getpath", h.handleV2GetPath)
+		v2.PUT("/put", h.handleV2Put)
+		v2.POST("/delete", h.handleV2Delete)
+		v2.GET("/separator", h.handleV2Separator)
+		v2.GET("/keys", h.handleV2Keys)
+	}
 }
 
 // ===== V3 Handlers =====
 
-func (h *KVHandler) handleV3Connect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
+func (h *KVHandler) handleV3Connect(c *gin.Context) {
 	info, err := h.v3.Connect()
 	if err != nil {
 		h.logger.Error("v3 connect failed", zap.Error(err))
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func (h *KVHandler) handleV3Get(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
-	key := r.URL.Query().Get("key")
+func (h *KVHandler) handleV3Get(c *gin.Context) {
+	key := c.Query("key")
 	if key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+		h.writeError(c, http.StatusBadRequest, "key is required", "")
 		return
 	}
 
 	node, err := h.v3.Get(key)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV3GetPath(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
-	key := r.URL.Query().Get("key")
+func (h *KVHandler) handleV3GetPath(c *gin.Context) {
+	key := c.Query("key")
 	if key == "" {
 		key = h.v3.GetSeparator()
 	}
 
 	node, err := h.v3.GetPath(key)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV3Put(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
+func (h *KVHandler) handleV3Put(c *gin.Context) {
 	var req PutRequest
-	if err := h.readJSON(r, &req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid request body", "")
-		return
-	}
-
-	if req.Key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.writeError(c, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
 	node, err := h.v3.Put(req.Key, req.Value, req.TTL)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV3Delete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
+func (h *KVHandler) handleV3Delete(c *gin.Context) {
 	var req DeleteRequest
-	if err := h.readJSON(r, &req); err != nil {
-		// 也支持 query 参数方式
-		req.Key = r.URL.Query().Get("key")
-		req.Dir = r.URL.Query().Get("dir") == "true"
-	}
-
-	if req.Key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.writeError(c, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
 	err := h.v3.Delete(req.Key, req.Dir)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, map[string]string{"message": "ok"})
+	c.JSON(http.StatusOK, gin.H{"message": "ok"})
 }
 
-func (h *KVHandler) handleV3Separator(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	h.writeJSON(w, http.StatusOK, SeparatorResponse{Separator: h.v3.GetSeparator()})
+func (h *KVHandler) handleV3Separator(c *gin.Context) {
+	c.JSON(http.StatusOK, SeparatorResponse{Separator: h.v3.GetSeparator()})
 }
 
-func (h *KVHandler) handleV3Keys(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
+func (h *KVHandler) handleV3Keys(c *gin.Context) {
 	node, err := h.v3.Keys()
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
 // ===== V2 Handlers =====
 
-func (h *KVHandler) handleV2Connect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-
+func (h *KVHandler) handleV2Connect(c *gin.Context) {
 	if h.v2 == nil || !h.v2.IsAvailable() {
-		h.writeError(w, http.StatusServiceUnavailable, "etcd v2 API is not available (requires --enable-v2=true)", "v2_unavailable")
+		h.writeError(c, http.StatusServiceUnavailable, "etcd v2 API is not available (requires --enable-v2=true)", "v2_unavailable")
 		return
 	}
 
 	info, err := h.v2.Connect()
 	if err != nil {
 		h.logger.Error("v2 connect failed", zap.Error(err))
-		h.writeError(w, http.StatusServiceUnavailable, err.Error(), "v2_unavailable")
+		h.writeError(c, http.StatusServiceUnavailable, err.Error(), "v2_unavailable")
 		return
 	}
 
@@ -236,188 +193,139 @@ func (h *KVHandler) handleV2Connect(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.writeJSON(w, http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func (h *KVHandler) handleV2Get(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	if !h.checkV2Available(w) {
+func (h *KVHandler) handleV2Get(c *gin.Context) {
+	if !h.checkV2Available(c) {
 		return
 	}
 
-	key := r.URL.Query().Get("key")
+	key := c.Query("key")
 	if key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+		h.writeError(c, http.StatusBadRequest, "key is required", "")
 		return
 	}
 
 	node, err := h.v2.Get(key)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV2GetPath(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	if !h.checkV2Available(w) {
+func (h *KVHandler) handleV2GetPath(c *gin.Context) {
+	if !h.checkV2Available(c) {
 		return
 	}
 
-	key := r.URL.Query().Get("key")
+	key := c.Query("key")
 	if key == "" {
 		key = h.v2.GetSeparator()
 	}
 
 	node, err := h.v2.GetPath(key)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV2Put(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	if !h.checkV2Available(w) {
+func (h *KVHandler) handleV2Put(c *gin.Context) {
+	if !h.checkV2Available(c) {
 		return
 	}
 
 	var req PutRequest
-	if err := h.readJSON(r, &req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid request body", "")
-		return
-	}
-
-	if req.Key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.writeError(c, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
 	node, err := h.v2.Put(req.Key, req.Value, req.TTL, req.Dir)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
-func (h *KVHandler) handleV2Delete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	if !h.checkV2Available(w) {
+func (h *KVHandler) handleV2Delete(c *gin.Context) {
+	if !h.checkV2Available(c) {
 		return
 	}
 
 	var req DeleteRequest
-	if err := h.readJSON(r, &req); err != nil {
-		req.Key = r.URL.Query().Get("key")
-		req.Dir = r.URL.Query().Get("dir") == "true"
-	}
-
-	if req.Key == "" {
-		h.writeError(w, http.StatusBadRequest, "key is required", "")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.writeError(c, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
 	err := h.v2.Delete(req.Key, req.Dir)
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, map[string]string{"message": "ok"})
+	c.JSON(http.StatusOK, gin.H{"message": "ok"})
 }
 
-func (h *KVHandler) handleV2Separator(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	h.writeJSON(w, http.StatusOK, SeparatorResponse{Separator: h.v2.GetSeparator()})
+func (h *KVHandler) handleV2Separator(c *gin.Context) {
+	c.JSON(http.StatusOK, SeparatorResponse{Separator: h.v2.GetSeparator()})
 }
 
-func (h *KVHandler) handleV2Keys(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
-		return
-	}
-	if !h.checkV2Available(w) {
+func (h *KVHandler) handleV2Keys(c *gin.Context) {
+	if !h.checkV2Available(c) {
 		return
 	}
 
 	node, err := h.v2.Keys()
 	if err != nil {
-		h.writeErrorFromEtcd(w, err)
+		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, NodeResponse{Node: *node})
+	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
 // ===== Helper Methods =====
 
-func (h *KVHandler) checkV2Available(w http.ResponseWriter) bool {
+func (h *KVHandler) checkV2Available(c *gin.Context) bool {
 	if h.v2 == nil || !h.v2.IsAvailable() {
-		h.writeError(w, http.StatusServiceUnavailable, "etcd v2 API is not available (requires --enable-v2=true)", "v2_unavailable")
+		h.writeError(c, http.StatusServiceUnavailable, "etcd v2 API is not available (requires --enable-v2=true)", "v2_unavailable")
 		return false
 	}
 	return true
 }
 
-func (h *KVHandler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func (h *KVHandler) writeError(w http.ResponseWriter, status int, message string, code string) {
-	resp := ErrorResponse{
+func (h *KVHandler) writeError(c *gin.Context, status int, message string, code string) {
+	c.JSON(status, ErrorResponse{
 		Error:   message,
 		Code:    code,
 		Message: message,
-	}
-	h.writeJSON(w, status, resp)
+	})
 }
 
-func (h *KVHandler) writeErrorFromEtcd(w http.ResponseWriter, err error) {
+func (h *KVHandler) writeErrorFromEtcd(c *gin.Context, err error) {
 	errStr := err.Error()
 
 	// 检测权限不足
 	if strings.Contains(errStr, "permission denied") || strings.Contains(errStr, "etcdserver: permission denied") {
-		h.writeError(w, http.StatusForbidden, "permission denied: the configured etcd user does not have permission for this operation", "permission_denied")
+		h.writeError(c, http.StatusForbidden, "permission denied: the configured etcd user does not have permission for this operation", "permission_denied")
 		return
 	}
 
 	// 检测 key 不存在
 	if strings.Contains(errStr, "key not found") || strings.Contains(errStr, "Key not found") {
-		h.writeError(w, http.StatusNotFound, errStr, "key_not_found")
+		h.writeError(c, http.StatusNotFound, errStr, "key_not_found")
 		return
 	}
 
 	// 其他错误
-	h.writeError(w, http.StatusInternalServerError, errStr, "")
-}
-
-func (h *KVHandler) readJSON(r *http.Request, v interface{}) error {
-	body, err := io.ReadAll(io.LimitReader(r.Body, int64(h.cfg.KVManager.MaxValueSize)+4096))
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(body, v)
+	h.writeError(c, http.StatusInternalServerError, errStr, "")
 }

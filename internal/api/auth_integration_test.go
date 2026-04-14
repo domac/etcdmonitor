@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +11,15 @@ import (
 
 	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/config"
+
+	"github.com/gin-gonic/gin"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+	gin.DefaultWriter = io.Discard
+	gin.DefaultErrorWriter = io.Discard
+}
 
 // newTestAPI 创建一个测试用的 API 实例（无 collector/storage 依赖）
 func newTestAPI(authRequired bool) (*API, *auth.MemorySessionStore) {
@@ -22,21 +31,28 @@ func newTestAPI(authRequired bool) (*API, *auth.MemorySessionStore) {
 		cfg:          cfg,
 		authRequired: authRequired,
 		sessionStore: store,
+		authHandler:  auth.NewAuthHandler(cfg, store, nil, authRequired),
 	}
 	return a, store
+}
+
+// newTestRouter 创建一个带中间件的测试路由器
+func newTestRouter(a *API) *gin.Engine {
+	router := gin.New()
+	return router
 }
 
 func TestAuthMiddleware_NoAuth(t *testing.T) {
 	a, _ := newTestAPI(false)
 
-	handler := a.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 when auth disabled, got %d", w.Code)
@@ -46,13 +62,14 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 func TestAuthMiddleware_RequiresAuth_NoCookie(t *testing.T) {
 	a, _ := newTestAPI(true)
 
-	handler := a.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 without cookie, got %d", w.Code)
@@ -64,15 +81,15 @@ func TestAuthMiddleware_RequiresAuth_ValidCookie(t *testing.T) {
 
 	session, _ := store.Create("testuser", 1*time.Hour)
 
-	handler := a.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 with valid cookie, got %d", w.Code)
@@ -82,14 +99,15 @@ func TestAuthMiddleware_RequiresAuth_ValidCookie(t *testing.T) {
 func TestAuthMiddleware_RequiresAuth_InvalidCookie(t *testing.T) {
 	a, _ := newTestAPI(true)
 
-	handler := a.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: "invalid-token"})
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 with invalid cookie, got %d", w.Code)
@@ -97,12 +115,14 @@ func TestAuthMiddleware_RequiresAuth_InvalidCookie(t *testing.T) {
 }
 
 func TestHandleAuthStatus_NoAuth(t *testing.T) {
-	_, store := newTestAPI(false)
+	a, _ := newTestAPI(false)
 
-	handler := auth.HandleAuthStatus(store, false)
+	router := gin.New()
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
+
 	req := httptest.NewRequest("GET", "/api/auth/status", nil)
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
@@ -117,12 +137,14 @@ func TestHandleAuthStatus_NoAuth(t *testing.T) {
 }
 
 func TestHandleAuthStatus_AuthRequired_NotAuthenticated(t *testing.T) {
-	_, store := newTestAPI(true)
+	a, _ := newTestAPI(true)
 
-	handler := auth.HandleAuthStatus(store, true)
+	router := gin.New()
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
+
 	req := httptest.NewRequest("GET", "/api/auth/status", nil)
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
@@ -136,15 +158,17 @@ func TestHandleAuthStatus_AuthRequired_NotAuthenticated(t *testing.T) {
 }
 
 func TestHandleAuthStatus_AuthRequired_Authenticated(t *testing.T) {
-	_, store := newTestAPI(true)
+	a, store := newTestAPI(true)
 
 	session, _ := store.Create("root", 1*time.Hour)
 
-	handler := auth.HandleAuthStatus(store, true)
+	router := gin.New()
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
+
 	req := httptest.NewRequest("GET", "/api/auth/status", nil)
 	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
@@ -161,15 +185,17 @@ func TestHandleAuthStatus_AuthRequired_Authenticated(t *testing.T) {
 }
 
 func TestHandleLogout(t *testing.T) {
-	_, store := newTestAPI(true)
+	a, store := newTestAPI(true)
 
 	session, _ := store.Create("root", 1*time.Hour)
 
-	handler := auth.HandleLogout(store)
+	router := gin.New()
+	router.POST("/api/auth/logout", a.authHandler.HandleLogout)
+
 	req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -194,34 +220,19 @@ func TestHandleLogout(t *testing.T) {
 }
 
 func TestHandleLogin_MissingFields(t *testing.T) {
-	_, store := newTestAPI(true)
-	cfg := &config.Config{}
+	a, _ := newTestAPI(true)
 
-	handler := auth.HandleLogin(cfg, store, nil)
+	router := gin.New()
+	router.POST("/api/auth/login", a.authHandler.HandleLogin)
 
 	// Empty body
 	req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for missing fields, got %d", w.Code)
-	}
-}
-
-func TestHandleLogin_MethodNotAllowed(t *testing.T) {
-	_, store := newTestAPI(true)
-	cfg := &config.Config{}
-
-	handler := auth.HandleLogin(cfg, store, nil)
-
-	req := httptest.NewRequest("GET", "/api/auth/login", nil)
-	w := httptest.NewRecorder()
-	handler(w, req)
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405 for GET, got %d", w.Code)
 	}
 }
 
@@ -232,14 +243,15 @@ func TestSessionExpiry_MiddlewareRejects(t *testing.T) {
 	session, _ := store.Create("testuser", 1*time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
 
-	handler := a.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
 	w := httptest.NewRecorder()
-	handler(w, req)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for expired session, got %d", w.Code)
