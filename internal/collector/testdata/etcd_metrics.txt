@@ -1,0 +1,107 @@
+# HELP etcd_server_proposals_committed_total The total number of consensus proposals committed.
+# TYPE etcd_server_proposals_committed_total counter
+etcd_server_proposals_committed_total 12345
+# HELP etcd_server_proposals_applied_total The total number of consensus proposals applied.
+# TYPE etcd_server_proposals_applied_total counter
+etcd_server_proposals_applied_total 12340
+# HELP etcd_server_proposals_pending The current number of pending proposals to commit.
+# TYPE etcd_server_proposals_pending gauge
+etcd_server_proposals_pending 0
+# HELP etcd_server_proposals_failed_total The total number of failed proposals seen.
+# TYPE etcd_server_proposals_failed_total counter
+etcd_server_proposals_failed_total 3
+# HELP etcd_server_leader_changes_seen_total The number of leader changes seen.
+# TYPE etcd_server_leader_changes_seen_total counter
+etcd_server_leader_changes_seen_total 2
+# HELP etcd_disk_wal_fsync_duration_seconds The latency distributions of fsync called by WAL.
+# TYPE etcd_disk_wal_fsync_duration_seconds histogram
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.001"} 100
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.002"} 200
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.004"} 400
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.008"} 600
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.016"} 800
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.032"} 900
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.064"} 950
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.128"} 980
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.256"} 995
+etcd_disk_wal_fsync_duration_seconds_bucket{le="0.512"} 999
+etcd_disk_wal_fsync_duration_seconds_bucket{le="1.024"} 1000
+etcd_disk_wal_fsync_duration_seconds_bucket{le="2.048"} 1000
+etcd_disk_wal_fsync_duration_seconds_bucket{le="4.096"} 1000
+etcd_disk_wal_fsync_duration_seconds_bucket{le="8.192"} 1000
+etcd_disk_wal_fsync_duration_seconds_bucket{le="+Inf"} 1000
+etcd_disk_wal_fsync_duration_seconds_sum 3.456
+etcd_disk_wal_fsync_duration_seconds_count 1000
+# HELP etcd_disk_backend_commit_duration_seconds The latency distributions of commit called by backend.
+# TYPE etcd_disk_backend_commit_duration_seconds histogram
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.001"} 50
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.002"} 150
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.004"} 300
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.008"} 500
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.016"} 700
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.032"} 850
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.064"} 950
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.128"} 990
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.256"} 998
+etcd_disk_backend_commit_duration_seconds_bucket{le="0.512"} 1000
+etcd_disk_backend_commit_duration_seconds_bucket{le="1.024"} 1000
+etcd_disk_backend_commit_duration_seconds_bucket{le="2.048"} 1000
+etcd_disk_backend_commit_duration_seconds_bucket{le="4.096"} 1000
+etcd_disk_backend_commit_duration_seconds_bucket{le="8.192"} 1000
+etcd_disk_backend_commit_duration_seconds_bucket{le="+Inf"} 1000
+etcd_disk_backend_commit_duration_seconds_sum 5.678
+etcd_disk_backend_commit_duration_seconds_count 1000
+# HELP etcd_mvcc_db_total_size_in_bytes Total size of the underlying database physically allocated in bytes.
+# TYPE etcd_mvcc_db_total_size_in_bytes gauge
+etcd_mvcc_db_total_size_in_bytes 2.097152e+06
+# HELP etcd_mvcc_put_total Total number of puts seen by this member.
+# TYPE etcd_mvcc_put_total counter
+etcd_mvcc_put_total 5000
+# HELP etcd_mvcc_delete_total Total number of deletes seen by this member.
+# TYPE etcd_mvcc_delete_total counter
+etcd_mvcc_delete_total 200
+# HELP etcd_network_peer_sent_bytes_total The total number of bytes sent to peers.
+# TYPE etcd_network_peer_sent_bytes_total counter
+etcd_network_peer_sent_bytes_total{To="8e9e05c52164694d"} 1234567
+etcd_network_peer_sent_bytes_total{To="a]1c9c5f1f7d0"} 2345678
+# HELP etcd_network_peer_received_bytes_total The total number of bytes received from peers.
+# TYPE etcd_network_peer_received_bytes_total counter
+etcd_network_peer_received_bytes_total{From="8e9e05c52164694d"} 9876543
+etcd_network_peer_received_bytes_total{From="a1c9c5f1f7d0"} 8765432
+# HELP grpc_server_handled_total Total number of RPCs completed on the server.
+# TYPE grpc_server_handled_total counter
+grpc_server_handled_total{grpc_code="OK",grpc_method="Range",grpc_service="etcdserverpb.KV",grpc_type="unary"} 50000
+grpc_server_handled_total{grpc_code="OK",grpc_method="Put",grpc_service="etcdserverpb.KV",grpc_type="unary"} 10000
+grpc_server_handled_total{grpc_code="OK",grpc_method="Txn",grpc_service="etcdserverpb.KV",grpc_type="unary"} 5000
+grpc_server_handled_total{grpc_code="InvalidArgument",grpc_method="Range",grpc_service="etcdserverpb.KV",grpc_type="unary"} 100
+grpc_server_handled_total{grpc_code="OK",grpc_method="Watch",grpc_service="etcdserverpb.Watch",grpc_type="bidi_stream"} 2000
+grpc_server_handled_total{grpc_code="Canceled",grpc_method="Watch",grpc_service="etcdserverpb.Watch",grpc_type="bidi_stream"} 50
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 123.45
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 5.24288e+07
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 42
+# HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 0.00001
+go_gc_duration_seconds{quantile="0.25"} 0.00002
+go_gc_duration_seconds{quantile="0.5"} 0.00003
+go_gc_duration_seconds{quantile="0.75"} 0.00005
+go_gc_duration_seconds{quantile="1"} 0.001
+go_gc_duration_seconds_sum 0.05
+go_gc_duration_seconds_count 100
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 25
+# HELP go_memstats_sys_bytes Number of bytes obtained from system.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 7.3400320e+07
+# HELP etcd_server_client_requests_total The total number of client requests per client version.
+# TYPE etcd_server_client_requests_total counter
+etcd_server_client_requests_total{client_api_version="3.0",type="Range"} 30000
+etcd_server_client_requests_total{client_api_version="3.0",type="Put"} 8000
+etcd_server_client_requests_total{client_api_version="2.0",type="GET"} 5000
