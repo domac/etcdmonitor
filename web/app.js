@@ -660,12 +660,12 @@ function updateMVCCOps(data) {
         legend: LEGEND_(),
         grid: GRID_LEGEND,
         xAxis: { type: 'time', ...AXIS_STYLE_() },
-        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) + '/s' } },
         series: [
-            makeSeries('Put', COLORS_().green, data['etcd_mvcc_put_total']),
-            makeSeries('Delete', COLORS_().red, data['etcd_mvcc_delete_total']),
-            makeSeries('Txn', COLORS_().blue, data['etcd_mvcc_txn_total']),
-            makeSeries('Range', COLORS_().cyan, data['etcd_mvcc_range_total'])
+            makeSeries('Put', COLORS_().green, data['etcd_mvcc_put_total_rate']),
+            makeSeries('Delete', COLORS_().red, data['etcd_mvcc_delete_total_rate']),
+            makeSeries('Txn', COLORS_().blue, data['etcd_mvcc_txn_total_rate']),
+            makeSeries('Range', COLORS_().cyan, data['etcd_mvcc_range_total_rate'])
         ]
     });
 }
@@ -679,7 +679,7 @@ function updatePeerTraffic(data) {
             formatter: params => {
                 let html = formatTime(params[0].value[0] / 1000) + '<br/>';
                 params.forEach(p => {
-                    html += `${p.marker} ${p.seriesName}: ${formatBytes(p.value[1])}<br/>`;
+                    html += `${p.marker} ${p.seriesName}: ${formatBytes(p.value[1])}/s<br/>`;
                 });
                 return html;
             }
@@ -689,13 +689,13 @@ function updatePeerTraffic(data) {
         xAxis: { type: 'time', ...AXIS_STYLE_() },
         yAxis: {
             type: 'value', ...AXIS_STYLE_(),
-            axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatBytes(v) }
+            axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatBytes(v) + '/s' }
         },
         series: [
-            makeSeries('Sent', COLORS_().blue, data['etcd_network_peer_sent_bytes_total'], { area: true }),
-            makeSeries('Received', COLORS_().green, data['etcd_network_peer_received_bytes_total'], { area: true }),
-            makeSeries('Send Failures', COLORS_().red, data['etcd_network_peer_sent_failures_total']),
-            makeSeries('Recv Failures', COLORS_().orange, data['etcd_network_peer_received_failures_total'])
+            makeSeries('Sent', COLORS_().blue, data['etcd_network_peer_sent_bytes_total_rate'], { area: true }),
+            makeSeries('Received', COLORS_().green, data['etcd_network_peer_received_bytes_total_rate'], { area: true }),
+            makeSeries('Send Failures', COLORS_().red, data['etcd_network_peer_sent_failures_total_rate']),
+            makeSeries('Recv Failures', COLORS_().orange, data['etcd_network_peer_received_failures_total_rate'])
         ]
     });
 }
@@ -737,12 +737,12 @@ function updateGRPC(data) {
         legend: LEGEND_(),
         grid: GRID_LEGEND,
         xAxis: { type: 'time', ...AXIS_STYLE_() },
-        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) + '/s' } },
         series: [
-            makeSeries('Total', COLORS_().blue, data['grpc_server_handled_total']),
-            makeSeries('OK', COLORS_().green, data['grpc_server_handled_ok_total'], { area: true }),
-            makeSeries('Error', COLORS_().red, data['grpc_server_handled_error_total']),
-            makeSeries('Started', COLORS_().purple, data['grpc_server_started_total'])
+            makeSeries('Total', COLORS_().blue, data['grpc_server_handled_total_rate']),
+            makeSeries('OK', COLORS_().green, data['grpc_server_handled_ok_total_rate'], { area: true }),
+            makeSeries('Error', COLORS_().red, data['grpc_server_handled_error_total_rate']),
+            makeSeries('Started', COLORS_().purple, data['grpc_server_started_total_rate'])
         ]
     });
 }
@@ -756,7 +756,7 @@ function updateGRPCTraffic(data) {
             formatter: params => {
                 let html = formatTime(params[0].value[0] / 1000) + '<br/>';
                 params.forEach(p => {
-                    html += `${p.marker} ${p.seriesName}: ${formatBytes(p.value[1])}<br/>`;
+                    html += `${p.marker} ${p.seriesName}: ${formatBytes(p.value[1])}/s<br/>`;
                 });
                 return html;
             }
@@ -766,11 +766,11 @@ function updateGRPCTraffic(data) {
         xAxis: { type: 'time', ...AXIS_STYLE_() },
         yAxis: {
             type: 'value', ...AXIS_STYLE_(),
-            axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatBytes(v) }
+            axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatBytes(v) + '/s' }
         },
         series: [
-            makeSeries('gRPC Sent', COLORS_().blue, data['etcd_network_client_grpc_sent_bytes_total'], { area: true }),
-            makeSeries('gRPC Received', COLORS_().green, data['etcd_network_client_grpc_received_bytes_total'], { area: true })
+            makeSeries('gRPC Sent', COLORS_().blue, data['etcd_network_client_grpc_sent_bytes_total_rate'], { area: true }),
+            makeSeries('gRPC Received', COLORS_().green, data['etcd_network_client_grpc_received_bytes_total_rate'], { area: true })
         ]
     });
 }
@@ -926,14 +926,14 @@ function updateServerHealth(data) {
         legend: LEGEND_(),
         grid: GRID_LEGEND,
         xAxis: { type: 'time', ...AXIS_STYLE_() },
-        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) + '/s' } },
         series: [
-            makeSeries('Client Requests (v3.5)', COLORS_().blue, data['etcd_server_client_requests_v35'], { area: true }),
-            makeSeries('Client Requests (v3.4)', COLORS_().orange, data['etcd_server_client_requests_v34']),
-            makeSeries('Client Requests (unknown)', COLORS_().gray, data['etcd_server_client_requests_unknown']),
-            makeSeries('Heartbeat Failures', COLORS_().red, data['etcd_server_heartbeat_send_failures_total']),
-            makeSeries('Health Failures', COLORS_().pink, data['etcd_server_health_failures']),
-            makeSeries('Read Index Failures', COLORS_().purple, data['etcd_server_read_indexes_failed_total'])
+            makeSeries('Client Requests (v3.5)', COLORS_().blue, data['etcd_server_client_requests_v35_rate'], { area: true }),
+            makeSeries('Client Requests (v3.4)', COLORS_().orange, data['etcd_server_client_requests_v34_rate']),
+            makeSeries('Client Requests (unknown)', COLORS_().gray, data['etcd_server_client_requests_unknown_rate']),
+            makeSeries('Heartbeat Failures', COLORS_().red, data['etcd_server_heartbeat_send_failures_total_rate']),
+            makeSeries('Health Failures', COLORS_().pink, data['etcd_server_health_failures_rate']),
+            makeSeries('Read Index Failures', COLORS_().purple, data['etcd_server_read_indexes_failed_total_rate'])
         ]
     });
 }
@@ -1005,7 +1005,7 @@ function updateMVCCCompaction(data) {
         series: [
             makeSeries('Current Revision', COLORS_().blue, data['etcd_mvcc_current_revision'], { area: true }),
             makeSeries('Compact Revision', COLORS_().cyan, data['etcd_mvcc_compact_revision']),
-            makeSeries('Compaction Keys', COLORS_().green, data['etcd_mvcc_db_compaction_keys_total']),
+            makeSeries('Compaction Keys', COLORS_().green, data['etcd_mvcc_db_compaction_keys_total_rate']),
             { ...makeSeries('Compaction Pause P99', COLORS_().red, data['etcd_mvcc_db_compaction_pause_duration_p99']), yAxisIndex: 1 },
             { ...makeSeries('Compaction Total P99', COLORS_().orange, data['etcd_mvcc_db_compaction_total_duration_p99']), yAxisIndex: 1 }
         ]
@@ -1022,7 +1022,7 @@ function updateWatcherEvents(data) {
         xAxis: { type: 'time', ...AXIS_STYLE_() },
         yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
         series: [
-            makeSeries('Events Total', COLORS_().blue, data['etcd_mvcc_events_total'], { area: true }),
+            makeSeries('Events Rate', COLORS_().blue, data['etcd_mvcc_events_total_rate'], { area: true }),
             makeSeries('Pending Events', COLORS_().orange, data['etcd_mvcc_pending_events_total']),
             makeSeries('Watch Streams', COLORS_().green, data['etcd_mvcc_watch_stream_total']),
             makeSeries('Watchers', COLORS_().cyan, data['etcd_mvcc_watcher_total']),
@@ -1039,12 +1039,12 @@ function updateLeaseActivity(data) {
         legend: LEGEND_(),
         grid: GRID_LEGEND,
         xAxis: { type: 'time', ...AXIS_STYLE_() },
-        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) + '/s' } },
         series: [
-            makeSeries('Granted', COLORS_().green, data['etcd_lease_granted_total'], { area: true }),
-            makeSeries('Revoked', COLORS_().orange, data['etcd_lease_revoked_total']),
-            makeSeries('Renewed', COLORS_().blue, data['etcd_lease_renewed_total']),
-            makeSeries('Expired', COLORS_().red, data['etcd_lease_expired_total'])
+            makeSeries('Granted', COLORS_().green, data['etcd_lease_granted_total_rate'], { area: true }),
+            makeSeries('Revoked', COLORS_().orange, data['etcd_lease_revoked_total_rate']),
+            makeSeries('Renewed', COLORS_().blue, data['etcd_lease_renewed_total_rate']),
+            makeSeries('Expired', COLORS_().red, data['etcd_lease_expired_total_rate'])
         ]
     });
 }
@@ -1060,8 +1060,8 @@ function updateActivePeersGRPC(data) {
         yAxis: { type: 'value', ...AXIS_STYLE_(), axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatNumber(v) } },
         series: [
             makeSeries('Active Peers', COLORS_().green, data['etcd_network_active_peers'], { area: true }),
-            makeSeries('gRPC Msg Received', COLORS_().blue, data['grpc_server_msg_received_total']),
-            makeSeries('gRPC Msg Sent', COLORS_().cyan, data['grpc_server_msg_sent_total'])
+            makeSeries('gRPC Msg Received', COLORS_().blue, data['grpc_server_msg_received_total_rate']),
+            makeSeries('gRPC Msg Sent', COLORS_().cyan, data['grpc_server_msg_sent_total_rate'])
         ]
     });
 }
@@ -1200,7 +1200,19 @@ const ALL_RANGE_METRICS = [
     // === Extended: Lease ===
     'etcd_lease_granted_total', 'etcd_lease_revoked_total', 'etcd_lease_renewed_total', 'etcd_lease_expired_total',
     // === Extended: Network/gRPC ===
-    'etcd_network_active_peers', 'grpc_server_msg_received_total', 'grpc_server_msg_sent_total'
+    'etcd_network_active_peers', 'grpc_server_msg_received_total', 'grpc_server_msg_sent_total',
+    // === Counter Rate Derivatives ===
+    'etcd_network_peer_sent_bytes_total_rate', 'etcd_network_peer_received_bytes_total_rate',
+    'etcd_network_peer_sent_failures_total_rate', 'etcd_network_peer_received_failures_total_rate',
+    'grpc_server_handled_total_rate', 'grpc_server_handled_ok_total_rate', 'grpc_server_handled_error_total_rate',
+    'grpc_server_started_total_rate',
+    'etcd_network_client_grpc_sent_bytes_total_rate', 'etcd_network_client_grpc_received_bytes_total_rate',
+    'etcd_mvcc_put_total_rate', 'etcd_mvcc_delete_total_rate', 'etcd_mvcc_txn_total_rate', 'etcd_mvcc_range_total_rate',
+    'etcd_lease_granted_total_rate', 'etcd_lease_revoked_total_rate', 'etcd_lease_renewed_total_rate', 'etcd_lease_expired_total_rate',
+    'grpc_server_msg_sent_total_rate', 'grpc_server_msg_received_total_rate',
+    'etcd_server_heartbeat_send_failures_total_rate', 'etcd_server_health_failures_rate', 'etcd_server_read_indexes_failed_total_rate',
+    'etcd_server_client_requests_v35_rate', 'etcd_server_client_requests_v34_rate', 'etcd_server_client_requests_unknown_rate',
+    'etcd_mvcc_db_compaction_keys_total_rate', 'etcd_mvcc_events_total_rate'
 ];
 
 // === Main Refresh ===

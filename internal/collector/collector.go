@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -341,6 +342,75 @@ func (c *Collector) collect() {
 	}
 }
 
+// counterRateExactKeys 需要精确匹配做速率转换的 Counter 指标名
+var counterRateExactKeys = []string{
+	// Peer Network Traffic
+	"etcd_network_peer_sent_bytes_total",
+	"etcd_network_peer_received_bytes_total",
+	"etcd_network_peer_sent_failures_total",
+	"etcd_network_peer_received_failures_total",
+	// gRPC Request Rate
+	"grpc_server_handled_total",
+	"grpc_server_handled_ok_total",
+	"grpc_server_handled_error_total",
+	"grpc_server_started_total",
+	// gRPC Client Traffic
+	"etcd_network_client_grpc_sent_bytes_total",
+	"etcd_network_client_grpc_received_bytes_total",
+	// MVCC Operations
+	"etcd_mvcc_put_total",
+	"etcd_mvcc_delete_total",
+	"etcd_mvcc_txn_total",
+	"etcd_mvcc_range_total",
+	// Lease Activity
+	"etcd_lease_granted_total",
+	"etcd_lease_revoked_total",
+	"etcd_lease_renewed_total",
+	"etcd_lease_expired_total",
+	// gRPC Messages
+	"grpc_server_msg_sent_total",
+	"grpc_server_msg_received_total",
+	// Server Health & Quota (fixed keys)
+	"etcd_server_heartbeat_send_failures_total",
+	"etcd_server_health_failures",
+	"etcd_server_read_indexes_failed_total",
+	// MVCC Compaction / Watcher & Events
+	"etcd_mvcc_db_compaction_keys_total",
+	"etcd_mvcc_events_total",
+}
+
+// counterRatePrefixes 需要前缀匹配做速率转换的动态 Counter key 前缀
+var counterRatePrefixes = []string{
+	"etcd_server_client_requests_", // _v35, _v34, _unknown 等动态 key
+}
+
+// computeRates 批量计算 Counter 指标的速率派生值
+// 支持精确匹配（exactKeys）和前缀匹配（prefixes）
+func computeRates(snapshot, prevSnapshot map[string]float64, elapsed float64,
+	exactKeys []string, prefixes []string) {
+
+	// 精确匹配
+	for _, key := range exactKeys {
+		cur, ok1 := snapshot[key]
+		prev, ok2 := prevSnapshot[key]
+		if ok1 && ok2 && cur >= prev {
+			snapshot[key+"_rate"] = (cur - prev) / elapsed
+		}
+	}
+
+	// 前缀匹配：遍历 snapshot 中所有匹配前缀的 key
+	for key, cur := range snapshot {
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(key, prefix) && !strings.HasSuffix(key, "_rate") {
+				if prev, ok := prevSnapshot[key]; ok && cur >= prev {
+					snapshot[key+"_rate"] = (cur - prev) / elapsed
+				}
+				break
+			}
+		}
+	}
+}
+
 // fetchMemberMetrics 并发安全：采集单个成员的 metrics 到内存，不写 SQLite
 func (c *Collector) fetchMemberMetrics(member MemberInfo, now time.Time) map[string]float64 {
 	collectURL := member.CollectEndpoint
@@ -582,19 +652,22 @@ func (c *Collector) parseMetrics(body io.Reader, member MemberInfo, now time.Tim
 	if !prevTime.IsZero() && prevSnapshot != nil {
 		elapsed := now.Sub(prevTime).Seconds()
 		if elapsed > 0 {
-			// Proposal Failed Rate
+			// Proposal Failed Rate（保留已有命名）
 			prevFailed := prevSnapshot["etcd_server_proposals_failed_total"]
 			curFailed := snapshot["etcd_server_proposals_failed_total"]
 			if curFailed >= prevFailed {
 				snapshot["etcd_server_proposals_failed_rate"] = (curFailed - prevFailed) / elapsed
 			}
 
-			// CPU Usage Rate（百分比）
+			// CPU Usage Rate（百分比，保留已有命名）
 			prevCPU := prevSnapshot["process_cpu_seconds_total"]
 			curCPU := snapshot["process_cpu_seconds_total"]
 			if curCPU >= prevCPU {
 				snapshot["process_cpu_usage_percent"] = (curCPU - prevCPU) / elapsed * 100
 			}
+
+			// 批量 Counter 速率转换
+			computeRates(snapshot, prevSnapshot, elapsed, counterRateExactKeys, counterRatePrefixes)
 		}
 	}
 
