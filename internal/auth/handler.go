@@ -121,6 +121,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"auth_required": false,
 			"app_version":   h.version,
+			"ops_enabled":   h.cfg.OpsEnabled(),
 		})
 		return
 	}
@@ -131,6 +132,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 			"auth_required": true,
 			"authenticated": false,
 			"app_version":   h.version,
+			"ops_enabled":   h.cfg.OpsEnabled(),
 		})
 		return
 	}
@@ -141,6 +143,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 			"auth_required": true,
 			"authenticated": false,
 			"app_version":   h.version,
+			"ops_enabled":   h.cfg.OpsEnabled(),
 		})
 		return
 	}
@@ -151,6 +154,7 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		"username":      session.Username,
 		"expires_at":    session.ExpiresAt.Unix(),
 		"app_version":   h.version,
+		"ops_enabled":   h.cfg.OpsEnabled(),
 	})
 }
 

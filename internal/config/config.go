@@ -57,6 +57,11 @@ type Config struct {
 		RequestTimeout int    `yaml:"request_timeout"`
 		MaxValueSize   int    `yaml:"max_value_size"`
 	} `yaml:"kv_manager"`
+
+	Ops struct {
+		Enable             *bool `yaml:"ops_enable"`
+		AuditRetentionDays int   `yaml:"audit_retention_days"`
+	} `yaml:"ops"`
 }
 
 // Load 从文件加载配置并填充默认值
@@ -143,6 +148,15 @@ func Load(path string) (*Config, error) {
 		cfg.KVManager.MaxValueSize = 2 * 1024 * 1024 // 2MB
 	}
 
+	// Ops 默认值
+	if cfg.Ops.Enable == nil {
+		t := true
+		cfg.Ops.Enable = &t
+	}
+	if cfg.Ops.AuditRetentionDays <= 0 {
+		cfg.Ops.AuditRetentionDays = 7
+	}
+
 	return cfg, nil
 }
 
@@ -178,4 +192,12 @@ func (cfg *Config) EtcdEndpoints() []string {
 func (cfg *Config) EtcdFirstEndpoint() string {
 	eps := cfg.EtcdEndpoints()
 	return eps[0]
+}
+
+// OpsEnabled 返回运维面板是否启用
+func (cfg *Config) OpsEnabled() bool {
+	if cfg.Ops.Enable == nil {
+		return true
+	}
+	return *cfg.Ops.Enable
 }

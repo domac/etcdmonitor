@@ -21,6 +21,7 @@ import (
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/kvmanager"
 	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/ops"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
 
@@ -120,13 +121,22 @@ func main() {
 	protected := a.SetupRoutes(router)
 
 	// 初始化 KV 管理模块
-	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr)
+	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr, store, sessionStore, dashboardAuthRequired)
 	if err != nil {
 		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
 	} else {
 		kvHandler.RegisterRoutes(protected)
 		defer kvHandler.Close()
-		logger.Info("KV manager initialized")
+		logger.Info("KV manager initialized with audit logging")
+	}
+
+	// 初始化 Ops 运维模块
+	if cfg.OpsEnabled() {
+		opsHandler := ops.New(cfg, store, coll, healthMgr, sessionStore, dashboardAuthRequired)
+		opsHandler.RegisterRoutes(protected)
+		logger.Info("Ops panel initialized")
+	} else {
+		logger.Info("Ops panel disabled by configuration")
 	}
 
 	// 静态文件服务（嵌入的 web 目录）

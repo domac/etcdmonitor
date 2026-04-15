@@ -30,6 +30,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Multi-endpoint failover** - Comma-separated endpoints with global health management, auto-recovery
 - **KV Tree management** - Browse, create, edit, delete keys with tree/list view, supports etcd v3 & v2
 - **KV Tree search** - Real-time key filtering with hierarchy preservation, 60s background index refresh
+- **Ops panel** - Cluster operations center: Defragment, Snapshot, Alarms, Move Leader, HashKV consistency check, Audit Log with sortable table, pagination, and CSV export
 - **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
@@ -114,6 +115,10 @@ kv_manager:
   request_timeout: 30                       # etcd request timeout (seconds)
   max_value_size: 2097152                   # Max value size in bytes (default 2MB)
 
+ops:
+  ops_enable: true                          # Enable Ops panel (set false to hide Ops tab and block /api/ops/*)
+  audit_retention_days: 7                   # Audit log retention period (days), auto-cleanup on expiry
+
 log:
   dir: "logs"
   filename: "etcdmonitor.log"
@@ -148,6 +153,8 @@ log:
 | `kv_manager.connect_timeout` | etcd connection timeout for KV operations (seconds) | `5` |
 | `kv_manager.request_timeout` | etcd request timeout for KV operations (seconds) | `30` |
 | `kv_manager.max_value_size` | Max value size for KV operations (bytes) | `2097152` (2MB) |
+| `ops.ops_enable` | Enable Ops panel; when `false`, Ops tab is hidden and `/api/ops/*` returns 403 | `true` |
+| `ops.audit_retention_days` | Audit log retention period (days), expired entries auto-purged | `7` |
 | `log.dir` | Log file directory | `logs` |
 | `log.filename` | Log file name | `etcdmonitor.log` |
 | `log.level` | Log level: debug, info, warn, error | `info` |
@@ -160,27 +167,28 @@ log:
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                 etcdmonitor (single binary)                │
-│                                                            │
-│  ┌───────────┐   ┌──────────┐   ┌──────────────────────┐ │
-│  │ Collector  │──▶│  SQLite  │◀──│  HTTP/S API          │ │
-│  │ (30s poll) │   │ (per     │   │  /api/current        │ │
-│  │ concurrent │   │  member)  │   │  /api/range          │ │
-│  └─────┬──┬──┘   └──────────┘   │  /api/members        │ │
-│        │  │                      │  /api/status          │ │
-│  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*         │ │
-│  │  Health   │   │ User     │◀──│  /api/user/*         │ │
-│  │  Manager  │   │ Prefs    │   │  /api/kv/v3/*        │ │
-│  │ (15s chk) │   │ (JSON)   │   │  /api/kv/v2/*        │ │
-│  └─────┬─────┘   └──────────┘   └──────────┬───────────┘ │
-│        │                                     │            │
-│  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────┐ │
-│  │    etcd     │   │KV Manager│──▶│  Dashboard         │ │
-│  │  /metrics   │   │ v3 + v2  │   │  Monitor + KV Tree │ │
-│  │  x N nodes  │   │per-request│  │  Login / Config     │ │
-│  └─────────────┘   └──────────┘   └────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                   etcdmonitor (single binary)                  │
+│                                                                │
+│  ┌───────────┐   ┌──────────┐   ┌────────────────────────┐   │
+│  │ Collector  │──▶│  SQLite  │◀──│  HTTP/S API            │   │
+│  │ (30s poll) │   │ (per     │   │  /api/current          │   │
+│  │ concurrent │   │  member)  │   │  /api/range            │   │
+│  └─────┬──┬──┘   └──────────┘   │  /api/members          │   │
+│        │  │                      │  /api/status            │   │
+│  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*           │   │
+│  │  Health   │   │ User     │◀──│  /api/user/*           │   │
+│  │  Manager  │   │ Prefs    │   │  /api/kv/v3/*          │   │
+│  │ (15s chk) │   │ (JSON)   │   │  /api/kv/v2/*          │   │
+│  └─────┬─────┘   └──────────┘   │  /api/ops/*            │   │
+│        │                         └──────────┬─────────────┘   │
+│        │                                     │                │
+│  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────────┐ │
+│  │    etcd     │   │KV Manager│──▶│  Dashboard             │ │
+│  │  /metrics   │   │ v3 + v2  │   │  Monitor + KV Tree     │ │
+│  │  x N nodes  │   │per-request│  │  Ops Panel + Login     │ │
+│  └─────────────┘   └──────────┘   └────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Dashboard Panels
@@ -445,6 +453,18 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 | `/api/kv/v2/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
 | `/api/kv/v2/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl, dir) |
 | `/api/kv/v2/delete` | POST | Yes | Delete a key or directory (JSON body: key, dir) |
+
+### Ops APIs
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/ops/defragment` | POST | Yes | Defragment a member (JSON body: member_id) |
+| `/api/ops/snapshot` | GET | Yes | Download snapshot from a member (query: member_id) |
+| `/api/ops/alarms` | GET | Yes | List active cluster alarms |
+| `/api/ops/alarms/disarm` | POST | Yes | Disarm a specific alarm (JSON body: member_id, alarm_type) |
+| `/api/ops/move-leader` | POST | Yes | Move leader to target member (JSON body: target_member_id) |
+| `/api/ops/hashkv` | POST | Yes | Run HashKV consistency check across all members |
+| `/api/ops/audit-logs` | GET | Yes | Query audit logs (query: page, page_size, operation) |
 
 > **Auth**: When etcd auth is enabled, protected endpoints require a valid session (via `Authorization: Bearer <token>` header). When etcd auth is not enabled, all endpoints are open.
 

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0] - 2026-04-15
+
+### Added
+
+- 运维面板（Ops Panel）：新增集群运维操作中心，支持 6 项运维功能
+  - Defragment：在线碎片整理，自动 Follower 优先排序，逐节点执行
+  - Snapshot：集群快照备份，流式下载到浏览器，服务端零临时文件
+  - Alarms：查看和解除集群告警（NOSPACE、CORRUPT）
+  - Move Leader：Leader 迁移，自动定位 Leader 节点发起调用
+  - HashKV Check：跨成员数据一致性校验
+  - Audit Log：全操作审计日志，记录用户、时间、操作、结果和耗时
+- 审计日志专业表格：支持列排序（点击表头升/降序切换）、分页导航、CSV 导出
+- 审计日志 SQLite 存储：后端自动记录所有运维操作，支持分页和按操作类型筛选
+
+### Changed
+
+- Ops 面板采用左右分栏布局（左侧菜单导航 + 右侧操作面板），替代卡片网格入口
+- 审计日志设为 Ops 面板默认首屏展示
+- 左侧菜单纯文字显示，移除字母图标
+
+### Fixed
+
+- 修复 Move Leader 在非 Leader 节点调用报 "etcdserver: not leader" 的问题，改为通过 Status + MemberList 自动定位 Leader 端点
+
 ## [0.5.6] - 2026-04-14
 
 ### Changed

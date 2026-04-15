@@ -59,6 +59,13 @@ kv_manager:
   # 最大 value 大小（字节），默认 2MB
   max_value_size: 2097152
 
+ops:
+  # 是否启用运维面板（Ops Tab），默认 true
+  # 设为 false 时前端隐藏 Ops Tab，后端 /api/ops/* 接口返回 403
+  ops_enable: true
+  # 审计日志保留天数，默认 7 天，超期自动清理
+  audit_retention_days: 7
+
 log:
   # 日志目录（相对于程序所在目录）
   dir: "logs"

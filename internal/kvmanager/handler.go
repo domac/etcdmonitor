@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"etcdmonitor/internal/auth"
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
+	"etcdmonitor/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -14,15 +17,19 @@ import (
 
 // KVHandler 提供 KV 管理的 HTTP 接口
 type KVHandler struct {
-	v3        *ClientV3
-	v2        *ClientV2
-	cfg       *config.Config
-	healthMgr *health.Manager
-	logger    *zap.Logger
+	v3           *ClientV3
+	v2           *ClientV2
+	cfg          *config.Config
+	healthMgr    *health.Manager
+	logger       *zap.Logger
+	store        *storage.Storage
+	sessionStore *auth.MemorySessionStore
+	authRequired bool
 }
 
 // NewKVHandler 创建 KVHandler 实例
-func NewKVHandler(cfg *config.Config, logger *zap.Logger, healthMgr *health.Manager) (*KVHandler, error) {
+func NewKVHandler(cfg *config.Config, logger *zap.Logger, healthMgr *health.Manager,
+	store *storage.Storage, sessionStore *auth.MemorySessionStore, authRequired bool) (*KVHandler, error) {
 	v3, err := NewClientV3(cfg, healthMgr)
 	if err != nil {
 		return nil, fmt.Errorf("create v3 client: %w", err)
@@ -34,11 +41,14 @@ func NewKVHandler(cfg *config.Config, logger *zap.Logger, healthMgr *health.Mana
 	}
 
 	return &KVHandler{
-		v3:        v3,
-		v2:        v2,
-		cfg:       cfg,
-		healthMgr: healthMgr,
-		logger:    logger,
+		v3:           v3,
+		v2:           v2,
+		cfg:          cfg,
+		healthMgr:    healthMgr,
+		logger:       logger,
+		store:        store,
+		sessionStore: sessionStore,
+		authRequired: authRequired,
 	}, nil
 }
 
@@ -46,6 +56,46 @@ func NewKVHandler(cfg *config.Config, logger *zap.Logger, healthMgr *health.Mana
 func (h *KVHandler) Close() {
 	if h.v3 != nil {
 		h.v3.Close()
+	}
+}
+
+// getUsername 从会话中获取用户名，如果未认证则返回 "anonymous"
+func (h *KVHandler) getUsername(c *gin.Context) string {
+	if !h.authRequired {
+		return "anonymous"
+	}
+	token := auth.ExtractToken(c.Request)
+	if token == "" {
+		return "anonymous"
+	}
+	session := h.sessionStore.Get(token)
+	if session == nil {
+		return "anonymous"
+	}
+	return session.Username
+}
+
+// logAudit 写入审计日志（非阻塞）
+func (h *KVHandler) logAudit(username, operation, target, params, result string,
+	durationMs int64, success bool) {
+	if h.store == nil {
+		return
+	}
+	entry := storage.AuditEntry{
+		Timestamp:  time.Now().Unix(),
+		Username:   username,
+		Operation:  operation,
+		Target:     target,
+		Params:     params,
+		Result:     result,
+		DurationMs: durationMs,
+		Success:    success,
+	}
+	if err := h.store.StoreAuditLog(entry); err != nil {
+		h.logger.Error("[KV] Failed to write audit log",
+			zap.String("operation", operation),
+			zap.String("target", target),
+			zap.Error(err))
 	}
 }
 
@@ -129,12 +179,23 @@ func (h *KVHandler) handleV3Put(c *gin.Context) {
 		return
 	}
 
+	// Prepare audit logging
+	username := h.getUsername(c)
+	start := time.Now()
+
+	// Build params JSON for audit
+	paramsJSON := fmt.Sprintf(`{"ttl": %d}`, req.TTL)
+
 	node, err := h.v3.Put(req.Key, req.Value, req.TTL)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		h.logAudit(username, "put", req.Key, paramsJSON, err.Error(), durationMs, false)
 		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
+	h.logAudit(username, "put", req.Key, paramsJSON, "ok", durationMs, true)
 	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
@@ -145,12 +206,23 @@ func (h *KVHandler) handleV3Delete(c *gin.Context) {
 		return
 	}
 
+	// Prepare audit logging
+	username := h.getUsername(c)
+	start := time.Now()
+
+	// Build params JSON for audit
+	paramsJSON := fmt.Sprintf(`{"dir": %v}`, req.Dir)
+
 	err := h.v3.Delete(req.Key, req.Dir)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		h.logAudit(username, "delete", req.Key, paramsJSON, err.Error(), durationMs, false)
 		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
+	h.logAudit(username, "delete", req.Key, paramsJSON, "ok", durationMs, true)
 	c.JSON(http.StatusOK, gin.H{"message": "ok"})
 }
 
@@ -246,12 +318,23 @@ func (h *KVHandler) handleV2Put(c *gin.Context) {
 		return
 	}
 
+	// Prepare audit logging
+	username := h.getUsername(c)
+	start := time.Now()
+
+	// Build params JSON for audit
+	paramsJSON := fmt.Sprintf(`{"ttl": %d, "dir": %v}`, req.TTL, req.Dir)
+
 	node, err := h.v2.Put(req.Key, req.Value, req.TTL, req.Dir)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		h.logAudit(username, "put", req.Key, paramsJSON, err.Error(), durationMs, false)
 		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
+	h.logAudit(username, "put", req.Key, paramsJSON, "ok", durationMs, true)
 	c.JSON(http.StatusOK, NodeResponse{Node: *node})
 }
 
@@ -266,12 +349,23 @@ func (h *KVHandler) handleV2Delete(c *gin.Context) {
 		return
 	}
 
+	// Prepare audit logging
+	username := h.getUsername(c)
+	start := time.Now()
+
+	// Build params JSON for audit
+	paramsJSON := fmt.Sprintf(`{"dir": %v}`, req.Dir)
+
 	err := h.v2.Delete(req.Key, req.Dir)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		h.logAudit(username, "delete", req.Key, paramsJSON, err.Error(), durationMs, false)
 		h.writeErrorFromEtcd(c, err)
 		return
 	}
 
+	h.logAudit(username, "delete", req.Key, paramsJSON, "ok", durationMs, true)
 	c.JSON(http.StatusOK, gin.H{"message": "ok"})
 }
 

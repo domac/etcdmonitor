@@ -89,6 +89,19 @@ func (s *Storage) initTables() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS ops_audit_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp INTEGER NOT NULL,
+			username TEXT NOT NULL DEFAULT '',
+			operation TEXT NOT NULL,
+			target TEXT NOT NULL DEFAULT '',
+			params TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT '',
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			success INTEGER NOT NULL DEFAULT 1
+		);
+		CREATE INDEX IF NOT EXISTS idx_audit_ts ON ops_audit_log(timestamp);
+		CREATE INDEX IF NOT EXISTS idx_audit_operation ON ops_audit_log(operation);
 	`)
 	return err
 }
@@ -374,11 +387,109 @@ func (s *Storage) cleanup() {
 			}
 		}
 	}
+
+	// 清理过期审计日志（独立保留策略，不受 etcd 地址变更影响）
+	auditRetentionDays := s.cfg.Ops.AuditRetentionDays
+	if auditRetentionDays <= 0 {
+		auditRetentionDays = 7
+	}
+	auditCutoff := time.Now().Add(-time.Duration(auditRetentionDays) * 24 * time.Hour).Unix()
+	auditResult, err := s.db.Exec("DELETE FROM ops_audit_log WHERE timestamp < ?", auditCutoff)
+	if err != nil {
+		logger.Errorf("[Storage] Audit log cleanup error: %v", err)
+		return
+	}
+	if rows, _ := auditResult.RowsAffected(); rows > 0 {
+		logger.Infof("[Storage] Cleaned up %d expired audit log records (older than %d days)", rows, auditRetentionDays)
+	}
 }
 
 // Close 关闭数据库
 func (s *Storage) Close() error {
 	return s.db.Close()
+}
+
+// AuditEntry 审计日志条目
+type AuditEntry struct {
+	ID         int64  `json:"id"`
+	Timestamp  int64  `json:"timestamp"`
+	Username   string `json:"username"`
+	Operation  string `json:"operation"`
+	Target     string `json:"target"`
+	Params     string `json:"params"`
+	Result     string `json:"result"`
+	DurationMs int64  `json:"duration_ms"`
+	Success    bool   `json:"success"`
+}
+
+// AuditFilter 审计日志查询过滤条件
+type AuditFilter struct {
+	Operation string // 按操作类型筛选，空表示不筛选
+	Page      int    // 页码，从 1 开始
+	PageSize  int    // 每页条数，默认 20
+}
+
+// StoreAuditLog 写入一条审计日志
+func (s *Storage) StoreAuditLog(entry AuditEntry) error {
+	successInt := 0
+	if entry.Success {
+		successInt = 1
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO ops_audit_log (timestamp, username, operation, target, params, result, duration_ms, success)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.Timestamp, entry.Username, entry.Operation, entry.Target, entry.Params, entry.Result, entry.DurationMs, successInt)
+	return err
+}
+
+// QueryAuditLogs 分页查询审计日志，按时间倒序
+func (s *Storage) QueryAuditLogs(filter AuditFilter) ([]AuditEntry, int64, error) {
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+	if filter.PageSize <= 0 {
+		filter.PageSize = 20
+	}
+
+	// 构建 WHERE 子句
+	where := ""
+	var args []interface{}
+	if filter.Operation != "" {
+		where = " WHERE operation = ?"
+		args = append(args, filter.Operation)
+	}
+
+	// 查询总数
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM ops_audit_log" + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// 查询分页数据
+	offset := (filter.Page - 1) * filter.PageSize
+	dataQuery := "SELECT id, timestamp, username, operation, target, params, result, duration_ms, success FROM ops_audit_log" +
+		where + " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?"
+	dataArgs := append(args, filter.PageSize, offset)
+
+	rows, err := s.db.Query(dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		var successInt int
+		if err := rows.Scan(&e.ID, &e.Timestamp, &e.Username, &e.Operation, &e.Target, &e.Params, &e.Result, &e.DurationMs, &successInt); err != nil {
+			continue
+		}
+		e.Success = successInt == 1
+		entries = append(entries, e)
+	}
+
+	return entries, total, rows.Err()
 }
 
 // DebugMemberIDs 调试用：返回数据库中所有不同的 member_id 及其记录数
