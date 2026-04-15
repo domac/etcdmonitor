@@ -427,6 +427,8 @@ function opsShowAuditLog() {
         '<div class="ops-filter-bar">' +
         '<select class="ops-filter-select" id="opsAuditFilter" onchange="opsAuditFilterChange(this.value)">' +
         '<option value="">All Operations</option>' +
+        '<option value="put">KV Put</option>' +
+        '<option value="delete">KV Delete</option>' +
         '<option value="defragment">Defragment</option>' +
         '<option value="snapshot">Snapshot</option>' +
         '<option value="alarm_disarm">Alarm Disarm</option>' +
