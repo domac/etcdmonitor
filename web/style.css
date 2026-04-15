@@ -1547,56 +1547,47 @@ body {
     margin: 0 auto;
 }
 
-/* Card Grid */
-.ops-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-}
-.ops-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 24px;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+/* Sidebar Layout */
+.ops-layout {
     display: flex;
-    align-items: flex-start;
-    gap: 16px;
+    gap: 0;
+    min-height: 480px;
 }
-.ops-card:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--accent-blue);
-    transform: translateY(-2px);
-}
-.ops-card-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    font-weight: 700;
+.ops-sidebar {
+    width: 220px;
     flex-shrink: 0;
+    border-right: 1px solid var(--border-color);
+    padding: 12px 0;
 }
-.ops-card-icon.defrag { background: rgba(63,185,80,0.15); color: var(--accent-green); }
-.ops-card-icon.snapshot { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
-.ops-card-icon.alarm { background: rgba(248,81,73,0.15); color: var(--accent-red); }
-.ops-card-icon.leader { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
-.ops-card-icon.hashkv { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
-.ops-card-icon.audit { background: rgba(57,210,192,0.15); color: var(--accent-cyan); }
-.ops-card-body h3 {
-    margin: 0 0 4px 0;
-    font-size: 15px;
-    font-weight: 600;
+.ops-sidebar-item {
+    display: block;
+    width: 100%;
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    border-left: 3px solid transparent;
+}
+.ops-sidebar-item:hover {
+    background: var(--bg-card-hover);
     color: var(--text-primary);
 }
-.ops-card-body p {
-    margin: 0;
-    font-size: 12px;
-    color: var(--text-secondary);
-    line-height: 1.4;
+.ops-sidebar-item.active {
+    background: var(--bg-card-hover);
+    color: var(--accent-blue);
+    font-weight: 600;
+    border-left-color: var(--accent-blue);
+}
+.ops-content {
+    flex: 1;
+    padding: 20px 24px;
+    min-width: 0;
+    overflow-y: auto;
 }
 
 /* Panel View */
@@ -1608,26 +1599,9 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 .ops-panel-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
     margin-bottom: 20px;
     padding-bottom: 16px;
     border-bottom: 1px solid var(--border-color);
-}
-.ops-back-btn {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.2s, color 0.2s;
-}
-.ops-back-btn:hover {
-    background: var(--bg-card-hover);
-    color: var(--text-primary);
 }
 .ops-panel-title {
     font-size: 18px;
@@ -1648,11 +1622,28 @@ body {
     font-weight: 600;
     border-bottom: 2px solid var(--border-color);
     white-space: nowrap;
+    user-select: none;
+}
+.ops-table th.sortable {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.ops-table th.sortable:hover {
+    color: var(--text-primary);
+}
+.ops-table th .sort-arrow {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 11px;
+    color: var(--accent-blue);
 }
 .ops-table td {
     padding: 10px 12px;
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
+}
+.ops-table tbody tr:nth-child(even) td {
+    background: var(--bg-card);
 }
 .ops-table tr:hover td {
     background: var(--bg-card-hover);
@@ -1896,6 +1887,26 @@ body {
     gap: 12px;
     margin-bottom: 16px;
 }
+.ops-filter-bar .ops-export-btn {
+    margin-left: auto;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.ops-filter-bar .ops-export-btn:hover:not(:disabled) {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-blue);
+}
+.ops-filter-bar .ops-export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 .ops-filter-select {
     padding: 6px 10px;
     border-radius: 6px;
@@ -1947,17 +1958,18 @@ body {
 /* ============================================
    Ops Panel - Light Theme Overrides
    ============================================ */
-[data-theme="light"] .ops-card { background: #fff; border-color: #e0e0e0; }
-[data-theme="light"] .ops-card:hover { background: #f8f9fa; border-color: var(--accent-blue); }
+[data-theme="light"] .ops-sidebar { border-right-color: #e0e0e0; }
+[data-theme="light"] .ops-sidebar-item:hover { background: #f8f9fa; }
+[data-theme="light"] .ops-sidebar-item.active { background: #f0f4ff; }
 [data-theme="light"] .ops-member-list { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-member-item { border-color: #eee; }
 [data-theme="light"] .ops-info { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-dialog { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-table td { border-color: #eee; }
 [data-theme="light"] .ops-table th { border-color: #ddd; }
+[data-theme="light"] .ops-table tbody tr:nth-child(even) td { background: #fafafa; }
 [data-theme="light"] .ops-toast { background: #fff; border-color: #e0e0e0; }
-[data-theme="light"] .ops-back-btn { background: #fff; border-color: #e0e0e0; }
-[data-theme="light"] .ops-back-btn:hover { background: #f8f9fa; }
 [data-theme="light"] .ops-filter-select { background: #fff; border-color: #e0e0e0; }
+[data-theme="light"] .ops-export-btn { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-btn-secondary { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-pagination button { background: #fff; border-color: #e0e0e0; }

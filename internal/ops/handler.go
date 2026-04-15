@@ -83,8 +83,13 @@ func snapshotTimeoutMiddleware() gin.HandlerFunc {
 
 // newEtcdClient 创建临时 etcd 客户端
 func (h *OpsHandler) newEtcdClient() (*clientv3.Client, error) {
+	return h.newEtcdClientWithEndpoints(h.healthMgr.HealthyEndpoints())
+}
+
+// newEtcdClientWithEndpoints 使用指定端点创建 etcd 客户端
+func (h *OpsHandler) newEtcdClientWithEndpoints(endpoints []string) (*clientv3.Client, error) {
 	etcdCfg := clientv3.Config{
-		Endpoints:   h.healthMgr.HealthyEndpoints(),
+		Endpoints:   endpoints,
 		DialTimeout: 5 * time.Second,
 	}
 	if h.cfg.Etcd.Username != "" {
@@ -398,15 +403,6 @@ func (h *OpsHandler) handleMoveLeader(c *gin.Context) {
 
 	logger.Infof("[Ops] MoveLeader started: target=%s(%s) by=%s", targetName, req.TargetMemberID, username)
 
-	cli, err := h.newEtcdClient()
-	if err != nil {
-		errMsg := fmt.Sprintf("create etcd client: %v", err)
-		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
-		return
-	}
-	defer cli.Close()
-
 	targetID, err := strconv.ParseUint(req.TargetMemberID, 10, 64)
 	if err != nil {
 		errMsg := fmt.Sprintf("invalid member_id: %v", err)
@@ -415,11 +411,77 @@ func (h *OpsHandler) handleMoveLeader(c *gin.Context) {
 		return
 	}
 
+	// MoveLeader must be called on the current leader node.
+	// 1) Get leader ID from any healthy endpoint via Status.
+	// 2) Get leader's client URL from MemberList.
+	// 3) Create a client connected only to the leader.
+	cli, err := h.newEtcdClient()
+	if err != nil {
+		errMsg := fmt.Sprintf("create etcd client: %v", err)
+		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+
+	findCtx, findCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer findCancel()
+
+	// Get leader ID from any endpoint's status
+	var leaderID uint64
+	endpoints := h.healthMgr.HealthyEndpoints()
+	for _, ep := range endpoints {
+		resp, statusErr := cli.Status(findCtx, ep)
+		if statusErr == nil && resp.Leader != 0 {
+			leaderID = resp.Leader
+			break
+		}
+	}
+	if leaderID == 0 {
+		cli.Close()
+		errMsg := "cannot determine leader from cluster status"
+		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+
+	// Find leader's client URL via MemberList
+	membersResp, err := cli.MemberList(findCtx)
+	cli.Close()
+	if err != nil {
+		errMsg := fmt.Sprintf("list members: %v", err)
+		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+
+	var leaderEndpoints []string
+	for _, m := range membersResp.Members {
+		if m.ID == leaderID {
+			leaderEndpoints = m.ClientURLs
+			break
+		}
+	}
+	if len(leaderEndpoints) == 0 {
+		errMsg := fmt.Sprintf("leader %d has no client URLs", leaderID)
+		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+
+	leaderCli, err := h.newEtcdClientWithEndpoints(leaderEndpoints)
+	if err != nil {
+		errMsg := fmt.Sprintf("connect to leader: %v", err)
+		h.logAudit(username, "move_leader", targetName, req.TargetMemberID, errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+	defer leaderCli.Close()
+
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, err = cli.MoveLeader(ctx, targetID)
+	_, err = leaderCli.MoveLeader(ctx, targetID)
 	durationMs := time.Since(start).Milliseconds()
 
 	if err != nil {

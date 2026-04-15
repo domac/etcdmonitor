@@ -3,11 +3,57 @@
 // ============================================
 
 var opsInitialized = false;
+var opsActivePanel = '';
 
 function opsInit() {
     if (opsInitialized) return;
     opsInitialized = true;
-    opsShowCards();
+    opsRenderLayout();
+    opsSelectPanel('audit');
+}
+
+// === Menu Configuration ===
+var opsMenuItems = [
+    { id: 'audit', label: 'Audit Log' },
+    { id: 'defrag', label: 'Defragment' },
+    { id: 'snapshot', label: 'Snapshot' },
+    { id: 'alarm', label: 'Alarms' },
+    { id: 'leader', label: 'Move Leader' },
+    { id: 'hashkv', label: 'HashKV Check' }
+];
+
+// === Layout ===
+function opsRenderLayout() {
+    var container = document.getElementById('opsContainer');
+    var sidebarHTML = '<div class="ops-sidebar">';
+    opsMenuItems.forEach(function(item) {
+        sidebarHTML += '<button class="ops-sidebar-item" data-panel="' + item.id + '" onclick="opsSelectPanel(\'' + item.id + '\')">' + item.label + '</button>';
+    });
+    sidebarHTML += '</div>';
+    container.innerHTML = '<div class="ops-layout">' + sidebarHTML + '<div class="ops-content" id="opsContentPanel"></div></div>';
+}
+
+function opsSelectPanel(id) {
+    opsActivePanel = id;
+    // Update active state
+    var items = document.querySelectorAll('.ops-sidebar-item');
+    items.forEach(function(el) {
+        if (el.dataset.panel === id) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+    // Render panel
+    var panels = {
+        'defrag': opsShowDefragment,
+        'snapshot': opsShowSnapshot,
+        'alarm': opsShowAlarm,
+        'leader': opsShowMoveLeader,
+        'hashkv': opsShowHashKV,
+        'audit': opsShowAuditLog
+    };
+    if (panels[id]) panels[id]();
 }
 
 // === Helpers ===
@@ -64,55 +110,20 @@ async function opsGetMembers() {
     return data.members || [];
 }
 
-// === Card Grid ===
-function opsShowCards() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML =
-        '<div class="ops-cards">' +
-        opsCardHTML('defrag', 'D', 'Defragment', 'Online compaction to reclaim disk space. Executes follower-first for safety.') +
-        opsCardHTML('snapshot', 'S', 'Snapshot', 'Download a cluster snapshot backup to your browser.') +
-        opsCardHTML('alarm', 'A', 'Alarms', 'View and disarm cluster alarms (NOSPACE, CORRUPT).') +
-        opsCardHTML('leader', 'L', 'Move Leader', 'Transfer leader role to a different member node.') +
-        opsCardHTML('hashkv', 'H', 'HashKV Check', 'Verify data consistency across all cluster members.') +
-        opsCardHTML('audit', 'R', 'Audit Log', 'View all operations history with user, time, and result.') +
-        '</div>';
-}
-
-function opsCardHTML(id, icon, title, desc) {
-    return '<div class="ops-card" onclick="opsOpenPanel(\'' + id + '\')">' +
-        '<div class="ops-card-icon ' + id + '">' + icon + '</div>' +
-        '<div class="ops-card-body"><h3>' + title + '</h3><p>' + desc + '</p></div></div>';
-}
-
-function opsOpenPanel(id) {
-    var panels = {
-        'defrag': opsShowDefragment,
-        'snapshot': opsShowSnapshot,
-        'alarm': opsShowAlarm,
-        'leader': opsShowMoveLeader,
-        'hashkv': opsShowHashKV,
-        'audit': opsShowAuditLog
-    };
-    if (panels[id]) panels[id]();
-}
-
 function opsPanelHeader(title) {
-    return '<div class="ops-panel-header">' +
-        '<button class="ops-back-btn" onclick="opsShowCards()">&larr; Back</button>' +
-        '<div class="ops-panel-title">' + title + '</div></div>';
+    return '<div class="ops-panel-header"><div class="ops-panel-title">' + title + '</div></div>';
 }
 
 // === Defragment Panel ===
 async function opsShowDefragment() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Defragment') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Defragment') +
         '<div id="opsDefragContent"><div class="ops-spinner"></div> Loading members...</div></div>';
 
     var members = await opsGetMembers();
-    var content = document.getElementById('opsDefragContent');
-    if (!members.length) { content.innerHTML = '<div class="ops-empty">No members available</div>'; return; }
+    var el = document.getElementById('opsDefragContent');
+    if (!members.length) { el.innerHTML = '<div class="ops-empty">No members available</div>'; return; }
 
-    // Sort: followers first, leader last
     var sorted = members.slice().sort(function(a, b) { return (a.is_leader ? 1 : 0) - (b.is_leader ? 1 : 0); });
 
     var html = '<div class="ops-select-all"><label><input type="checkbox" id="opsDefragAll" onchange="opsDefragToggleAll(this.checked)"> Select All</label></div>';
@@ -127,7 +138,7 @@ async function opsShowDefragment() {
     });
     html += '</div>';
     html += '<button class="ops-btn ops-btn-primary" id="opsDefragBtn" onclick="opsExecDefragment()">Execute Defragment</button>';
-    content.innerHTML = html;
+    el.innerHTML = html;
 }
 
 function opsDefragToggleAll(checked) {
@@ -138,7 +149,6 @@ async function opsExecDefragment() {
     var cbs = document.querySelectorAll('.ops-defrag-cb:checked');
     if (!cbs.length) { opsToast('Please select at least one member', 'error'); return; }
 
-    // Sort: followers first, leaders last
     var ids = Array.from(cbs).sort(function(a, b) {
         return parseInt(a.dataset.leader) - parseInt(b.dataset.leader);
     }).map(function(cb) { return cb.value; });
@@ -185,12 +195,12 @@ async function opsExecDefragment() {
 
 // === Snapshot Panel ===
 async function opsShowSnapshot() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Snapshot Backup') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Snapshot Backup') +
         '<div id="opsSnapContent"><div class="ops-spinner"></div> Loading...</div></div>';
 
     var members = await opsGetMembers();
-    var content = document.getElementById('opsSnapContent');
+    var el = document.getElementById('opsSnapContent');
 
     var html = '<div class="ops-info"><div class="ops-info-row"><span class="ops-info-label">Source Node</span>' +
         '<select class="ops-filter-select" id="opsSnapMember">';
@@ -201,7 +211,7 @@ async function opsShowSnapshot() {
     html += '<p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Snapshot will be streamed directly to your browser. No temporary files are created on the server.</p>';
     html += '<button class="ops-btn ops-btn-primary" id="opsSnapBtn" onclick="opsExecSnapshot()">Create Snapshot</button>';
     html += '<div id="opsSnapStatus" style="margin-top:12px"></div>';
-    content.innerHTML = html;
+    el.innerHTML = html;
 }
 
 async function opsExecSnapshot() {
@@ -242,21 +252,21 @@ async function opsExecSnapshot() {
 
 // === Alarm Panel ===
 async function opsShowAlarm() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Cluster Alarms') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Cluster Alarms') +
         '<div id="opsAlarmContent"><div class="ops-spinner"></div> Loading...</div></div>';
     await opsRefreshAlarms();
 }
 
 async function opsRefreshAlarms() {
-    var content = document.getElementById('opsAlarmContent');
+    var el = document.getElementById('opsAlarmContent');
     try {
         var resp = await opsFetchJSON('/api/ops/alarms');
         var data = await resp.json();
         var alarms = data.alarms || [];
 
         if (!alarms.length) {
-            content.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\u2705</div>Cluster is healthy. No active alarms.</div>';
+            el.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\u2705</div>Cluster is healthy. No active alarms.</div>';
             return;
         }
 
@@ -267,9 +277,9 @@ async function opsRefreshAlarms() {
                 'onclick="opsDisarmAlarm(\'' + a.member_id + '\',\'' + a.alarm_type + '\')">Disarm</button></td></tr>';
         });
         html += '</tbody></table>';
-        content.innerHTML = html;
+        el.innerHTML = html;
     } catch (e) {
-        content.innerHTML = '<div class="ops-result error">Failed to load alarms: ' + e.message + '</div>';
+        el.innerHTML = '<div class="ops-result error">Failed to load alarms: ' + e.message + '</div>';
     }
 }
 
@@ -296,17 +306,17 @@ async function opsDisarmAlarm(memberID, alarmType) {
 
 // === Move Leader Panel ===
 async function opsShowMoveLeader() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Move Leader') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Move Leader') +
         '<div id="opsLeaderContent"><div class="ops-spinner"></div> Loading...</div></div>';
 
     var members = await opsGetMembers();
-    var content = document.getElementById('opsLeaderContent');
+    var el = document.getElementById('opsLeaderContent');
     var leader = members.find(function(m) { return m.is_leader; });
     var followers = members.filter(function(m) { return !m.is_leader; });
 
     if (members.length <= 1) {
-        content.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\u2139\ufe0f</div>Single-node cluster. Leader migration is not applicable.</div>';
+        el.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\u2139\ufe0f</div>Single-node cluster. Leader migration is not applicable.</div>';
         return;
     }
 
@@ -322,7 +332,7 @@ async function opsShowMoveLeader() {
     html += '</select></div>';
     html += '<button class="ops-btn ops-btn-primary" onclick="opsExecMoveLeader()">Move Leader</button>';
     html += '<div id="opsLeaderStatus" style="margin-top:12px"></div>';
-    content.innerHTML = html;
+    el.innerHTML = html;
 }
 
 async function opsExecMoveLeader() {
@@ -356,8 +366,8 @@ async function opsExecMoveLeader() {
 
 // === HashKV Panel ===
 function opsShowHashKV() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('HashKV Consistency Check') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('HashKV Consistency Check') +
         '<p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Compares data hash across all members at the same revision to detect inconsistencies.</p>' +
         '<button class="ops-btn ops-btn-primary" id="opsHashBtn" onclick="opsExecHashKV()">Run Consistency Check</button>' +
         '<div id="opsHashResult" style="margin-top:16px"></div></div>';
@@ -407,10 +417,13 @@ async function opsExecHashKV() {
 // === Audit Log Panel ===
 var opsAuditPage = 1;
 var opsAuditFilter = '';
+var opsAuditSortCol = '';
+var opsAuditSortAsc = true;
+var opsAuditCurrentEntries = [];
 
 function opsShowAuditLog() {
-    var container = document.getElementById('opsContainer');
-    container.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Audit Log') +
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Audit Log') +
         '<div class="ops-filter-bar">' +
         '<select class="ops-filter-select" id="opsAuditFilter" onchange="opsAuditFilterChange(this.value)">' +
         '<option value="">All Operations</option>' +
@@ -418,21 +431,102 @@ function opsShowAuditLog() {
         '<option value="snapshot">Snapshot</option>' +
         '<option value="alarm_disarm">Alarm Disarm</option>' +
         '<option value="move_leader">Move Leader</option>' +
-        '<option value="hashkv">HashKV</option></select></div>' +
+        '<option value="hashkv">HashKV</option></select>' +
+        '<button class="ops-export-btn" id="opsExportBtn" onclick="opsExportCSV()">Export CSV</button>' +
+        '</div>' +
         '<div id="opsAuditContent"><div class="ops-spinner"></div> Loading...</div></div>';
     opsAuditPage = 1;
     opsAuditFilter = '';
+    opsAuditSortCol = '';
+    opsAuditSortAsc = true;
+    opsAuditCurrentEntries = [];
     opsLoadAuditLogs();
 }
 
 function opsAuditFilterChange(val) {
     opsAuditFilter = val;
     opsAuditPage = 1;
+    opsAuditSortCol = '';
+    opsAuditSortAsc = true;
     opsLoadAuditLogs();
 }
 
+function opsAuditSortBy(col) {
+    if (opsAuditSortCol === col) {
+        opsAuditSortAsc = !opsAuditSortAsc;
+    } else {
+        opsAuditSortCol = col;
+        opsAuditSortAsc = true;
+    }
+    opsRenderAuditTable();
+}
+
+function opsGetSortedEntries() {
+    if (!opsAuditSortCol) return opsAuditCurrentEntries.slice();
+    var col = opsAuditSortCol;
+    var asc = opsAuditSortAsc;
+    return opsAuditCurrentEntries.slice().sort(function(a, b) {
+        var va, vb;
+        if (col === 'timestamp') { va = a.timestamp; vb = b.timestamp; }
+        else if (col === 'username') { va = (a.username || '').toLowerCase(); vb = (b.username || '').toLowerCase(); }
+        else if (col === 'operation') { va = a.operation; vb = b.operation; }
+        else if (col === 'target') { va = (a.target || '').toLowerCase(); vb = (b.target || '').toLowerCase(); }
+        else if (col === 'result') { va = (a.success ? '0' : '1') + (a.result || ''); vb = (b.success ? '0' : '1') + (b.result || ''); }
+        else if (col === 'duration_ms') { va = a.duration_ms; vb = b.duration_ms; }
+        else { return 0; }
+        if (va < vb) return asc ? -1 : 1;
+        if (va > vb) return asc ? 1 : -1;
+        return 0;
+    });
+}
+
+function opsAuditSortArrow(col) {
+    if (opsAuditSortCol !== col) return '';
+    return '<span class="sort-arrow">' + (opsAuditSortAsc ? '\u25b2' : '\u25bc') + '</span>';
+}
+
+function opsRenderAuditTable() {
+    var el = document.getElementById('opsAuditContent');
+    if (!el) return;
+
+    var sorted = opsGetSortedEntries();
+
+    var html = '<table class="ops-table"><thead><tr>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'timestamp\')">Time' + opsAuditSortArrow('timestamp') + '</th>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'username\')">User' + opsAuditSortArrow('username') + '</th>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'operation\')">Operation' + opsAuditSortArrow('operation') + '</th>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'target\')">Target' + opsAuditSortArrow('target') + '</th>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'result\')">Result' + opsAuditSortArrow('result') + '</th>' +
+        '<th class="sortable" onclick="opsAuditSortBy(\'duration_ms\')">Duration' + opsAuditSortArrow('duration_ms') + '</th>' +
+        '</tr></thead><tbody>';
+    sorted.forEach(function(e) {
+        var dt = new Date(e.timestamp * 1000);
+        var timeStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString();
+        var resultClass = e.success ? 'color:var(--accent-green)' : 'color:var(--accent-red)';
+        var resultText = e.success ? '\u2713 ' + (e.result || 'success') : '\u2717 ' + (e.result || 'failed');
+        if (resultText.length > 60) resultText = resultText.substring(0, 60) + '...';
+        html += '<tr><td style="white-space:nowrap">' + timeStr + '</td><td>' + (e.username || '-') + '</td>' +
+            '<td><code>' + e.operation + '</code></td><td>' + (e.target || '-') + '</td>' +
+            '<td style="' + resultClass + ';font-size:12px" title="' + (e.result || '').replace(/"/g, '&quot;') + '">' + resultText + '</td>' +
+            '<td>' + e.duration_ms + 'ms</td></tr>';
+    });
+    html += '</tbody></table>';
+
+    // Restore pagination from stored values
+    var paginationEl = document.getElementById('opsAuditPagination');
+    if (paginationEl) {
+        el.innerHTML = html;
+        el.appendChild(paginationEl);
+    } else {
+        el.innerHTML = html;
+    }
+}
+
+var opsAuditTotal = 0;
+var opsAuditTotalPages = 1;
+
 async function opsLoadAuditLogs() {
-    var content = document.getElementById('opsAuditContent');
+    var el = document.getElementById('opsAuditContent');
     var url = '/api/ops/audit-logs?page=' + opsAuditPage + '&page_size=15';
     if (opsAuditFilter) url += '&operation=' + opsAuditFilter;
 
@@ -440,36 +534,91 @@ async function opsLoadAuditLogs() {
         var resp = await opsFetchJSON(url);
         var data = await resp.json();
         var entries = data.entries || [];
-        var total = data.total || 0;
+        opsAuditTotal = data.total || 0;
         var pageSize = data.page_size || 15;
-        var totalPages = Math.ceil(total / pageSize) || 1;
+        opsAuditTotalPages = Math.ceil(opsAuditTotal / pageSize) || 1;
 
         if (!entries.length) {
-            content.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\ud83d\udcdd</div>No audit log entries found.</div>';
+            el.innerHTML = '<div class="ops-empty"><div class="ops-empty-icon">\ud83d\udcdd</div>No audit log entries found.</div>';
             return;
         }
 
-        var html = '<table class="ops-table"><thead><tr><th>Time</th><th>User</th><th>Operation</th><th>Target</th><th>Result</th><th>Duration</th></tr></thead><tbody>';
+        opsAuditCurrentEntries = entries;
+        opsRenderAuditTable();
+
+        // Append pagination
+        var pagHTML = '<div class="ops-pagination" id="opsAuditPagination">' +
+            '<button onclick="opsAuditPage--;opsLoadAuditLogs()"' + (opsAuditPage <= 1 ? ' disabled' : '') + '>&laquo; Prev</button>' +
+            '<span>Page ' + opsAuditPage + ' / ' + opsAuditTotalPages + ' (' + opsAuditTotal + ' total)</span>' +
+            '<button onclick="opsAuditPage++;opsLoadAuditLogs()"' + (opsAuditPage >= opsAuditTotalPages ? ' disabled' : '') + '>Next &raquo;</button></div>';
+        el.insertAdjacentHTML('beforeend', pagHTML);
+    } catch (e) {
+        el.innerHTML = '<div class="ops-result error">Failed to load audit logs: ' + e.message + '</div>';
+    }
+}
+
+// === CSV Export ===
+async function opsExportCSV() {
+    var btn = document.getElementById('opsExportBtn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Exporting...';
+
+    try {
+        var url = '/api/ops/audit-logs?page=1&page_size=10000';
+        if (opsAuditFilter) url += '&operation=' + opsAuditFilter;
+        var resp = await opsFetchJSON(url);
+        var data = await resp.json();
+        var entries = data.entries || [];
+
+        if (!entries.length) {
+            opsToast('No data to export', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Export CSV';
+            return;
+        }
+
+        var csvRows = [];
+        csvRows.push('Time,User,Operation,Target,Result,Duration(ms)');
         entries.forEach(function(e) {
             var dt = new Date(e.timestamp * 1000);
-            var timeStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString();
-            var resultClass = e.success ? 'color:var(--accent-green)' : 'color:var(--accent-red)';
-            var resultText = e.success ? '\u2713 ' + (e.result || 'success') : '\u2717 ' + (e.result || 'failed');
-            if (resultText.length > 60) resultText = resultText.substring(0, 60) + '...';
-            html += '<tr><td style="white-space:nowrap">' + timeStr + '</td><td>' + (e.username || '-') + '</td>' +
-                '<td><code>' + e.operation + '</code></td><td>' + (e.target || '-') + '</td>' +
-                '<td style="' + resultClass + ';font-size:12px" title="' + (e.result || '').replace(/"/g, '&quot;') + '">' + resultText + '</td>' +
-                '<td>' + e.duration_ms + 'ms</td></tr>';
+            var timeStr = dt.toISOString();
+            var result = e.success ? 'success' : 'failed';
+            if (e.result) result += ': ' + e.result;
+            // Escape CSV fields
+            var escapeCsv = function(val) {
+                val = String(val || '');
+                if (val.indexOf(',') >= 0 || val.indexOf('"') >= 0 || val.indexOf('\n') >= 0) {
+                    return '"' + val.replace(/"/g, '""') + '"';
+                }
+                return val;
+            };
+            csvRows.push([
+                escapeCsv(timeStr),
+                escapeCsv(e.username || ''),
+                escapeCsv(e.operation),
+                escapeCsv(e.target || ''),
+                escapeCsv(result),
+                e.duration_ms
+            ].join(','));
         });
-        html += '</tbody></table>';
 
-        html += '<div class="ops-pagination">' +
-            '<button onclick="opsAuditPage--;opsLoadAuditLogs()"' + (opsAuditPage <= 1 ? ' disabled' : '') + '>&laquo; Prev</button>' +
-            '<span>Page ' + opsAuditPage + ' / ' + totalPages + ' (' + total + ' total)</span>' +
-            '<button onclick="opsAuditPage++;opsLoadAuditLogs()"' + (opsAuditPage >= totalPages ? ' disabled' : '') + '>Next &raquo;</button></div>';
+        var csvContent = '\ufeff' + csvRows.join('\n');
+        var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        var url2 = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url2;
+        a.download = 'audit-log-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url2);
 
-        content.innerHTML = html;
+        opsToast('CSV exported (' + entries.length + ' records)', 'success');
     } catch (e) {
-        content.innerHTML = '<div class="ops-result error">Failed to load audit logs: ' + e.message + '</div>';
+        opsToast('Export failed: ' + e.message, 'error');
     }
+
+    btn.disabled = false;
+    btn.textContent = 'Export CSV';
 }
