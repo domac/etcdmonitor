@@ -217,6 +217,27 @@ func (c *Collector) injectRaftStatus(member MemberInfo, snapshot map[string]floa
 	snapshot["raft_index"] = float64(resp.RaftIndex)
 }
 
+// injectLeaseCount 调用一次 Leases() 获取活跃 Lease 数量，注入所有成员 snapshot
+func (c *Collector) injectLeaseCount(snapshots []memberSnapshot) {
+	if c.etcdClient == nil || len(snapshots) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.etcdClient.Leases(ctx)
+	if err != nil {
+		logger.Warnf("[Collector] Leases() for lease count failed: %v", err)
+		return
+	}
+
+	count := float64(len(resp.Leases))
+	for i := range snapshots {
+		snapshots[i].snapshot["etcd_lease_count"] = count
+	}
+}
+
 // memberSnapshot 一次采集的结果
 type memberSnapshot struct {
 	member   MemberInfo
@@ -301,8 +322,17 @@ func (c *Collector) collect() {
 
 	// 阶段2：串行写入 SQLite（避免 SQLITE_BUSY）
 	// 写入前注入 raft_term / raft_index（通过 Status() gRPC 获取）
+	var collected []memberSnapshot
 	for res := range results {
 		c.injectRaftStatus(res.member, res.snapshot)
+		collected = append(collected, res)
+	}
+
+	// 注入 Lease 总数（集群级，调用一次注入所有成员）
+	c.injectLeaseCount(collected)
+
+	// 写入 SQLite
+	for _, res := range collected {
 		if err := c.store.Store(now, res.member.ID, res.snapshot); err != nil {
 			logger.Errorf("[Collector] [%s] Error storing metrics: %v", res.member.Name, err)
 		} else {

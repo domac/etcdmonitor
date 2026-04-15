@@ -16,31 +16,32 @@ let currentPanelConfig = null; // 当前面板配置
 // 每个面板的元数据：ID、显示名称、所属分区、默认顺序
 const PANEL_REGISTRY = [
     { id: 'chartRaftProposals',    name: 'Raft Proposals',               section: 'raft',    order: 0 },
-    { id: 'chartLeaderChanges',    name: 'Leader Changes & Slow Ops',    section: 'raft',    order: 1 },
-    { id: 'chartProposalLag',      name: 'Proposal Commit-Apply Lag',    section: 'raft',    order: 2 },
-    { id: 'chartProposalFailedRate', name: 'Proposal Failed Rate',       section: 'raft',    order: 3 },
-    { id: 'chartWALFsync',        name: 'WAL Fsync Duration',            section: 'disk',    order: 4 },
-    { id: 'chartBackendCommit',    name: 'Backend Commit Duration',      section: 'disk',    order: 5 },
-    { id: 'chartDBSize',          name: 'Database Size',                  section: 'storage', order: 6 },
-    { id: 'chartMVCCOps',         name: 'MVCC Operations',                section: 'storage', order: 7 },
-    { id: 'chartPeerTraffic',     name: 'Peer Network Traffic',           section: 'network', order: 8 },
-    { id: 'chartPeerRTT',         name: 'Peer Round Trip Time',           section: 'network', order: 9 },
-    { id: 'chartGRPC',            name: 'gRPC Request Rate',              section: 'grpc',    order: 10 },
-    { id: 'chartGRPCTraffic',     name: 'gRPC Client Traffic',            section: 'grpc',    order: 11 },
-    { id: 'chartCPU',             name: 'CPU Usage',                      section: 'runtime', order: 12 },
-    { id: 'chartMemory',          name: 'Memory',                         section: 'runtime', order: 13 },
-    { id: 'chartGoroutines',      name: 'Goroutines',                     section: 'runtime', order: 14 },
-    { id: 'chartGC',              name: 'GC Duration',                    section: 'runtime', order: 15 },
-    { id: 'chartFDs',             name: 'File Descriptors',               section: 'runtime', order: 16 },
-    { id: 'chartMemSys',          name: 'Memory Sys',                     section: 'runtime', order: 17 },
+    { id: 'chartLeaderChanges',    name: 'Leader Changes',               section: 'raft',    order: 1 },
+    { id: 'chartSlowOps',           name: 'Slow Operations',              section: 'raft',    order: 2 },
+    { id: 'chartProposalLag',      name: 'Proposal Commit-Apply Lag',    section: 'raft',    order: 3 },
+    { id: 'chartProposalFailedRate', name: 'Proposal Failed Rate',       section: 'raft',    order: 4 },
+    { id: 'chartWALFsync',        name: 'WAL Fsync Duration',            section: 'disk',    order: 5 },
+    { id: 'chartBackendCommit',    name: 'Backend Commit Duration',      section: 'disk',    order: 6 },
+    { id: 'chartDBSize',          name: 'Database Size',                  section: 'storage', order: 7 },
+    { id: 'chartMVCCOps',         name: 'MVCC Operations',                section: 'storage', order: 8 },
+    { id: 'chartPeerTraffic',     name: 'Peer Network Traffic',           section: 'network', order: 9 },
+    { id: 'chartPeerRTT',         name: 'Peer Round Trip Time',           section: 'network', order: 10 },
+    { id: 'chartGRPC',            name: 'gRPC Request Rate',              section: 'grpc',    order: 11 },
+    { id: 'chartGRPCTraffic',     name: 'gRPC Client Traffic',            section: 'grpc',    order: 12 },
+    { id: 'chartCPU',             name: 'CPU Usage',                      section: 'runtime', order: 13 },
+    { id: 'chartMemory',          name: 'Memory',                         section: 'runtime', order: 14 },
+    { id: 'chartGoroutines',      name: 'Goroutines',                     section: 'runtime', order: 15 },
+    { id: 'chartGC',              name: 'GC Duration',                    section: 'runtime', order: 16 },
+    { id: 'chartFDs',             name: 'File Descriptors',               section: 'runtime', order: 17 },
+    { id: 'chartMemSys',          name: 'Memory Sys',                     section: 'runtime', order: 18 },
     // === 扩展面板（默认隐藏） ===
-    { id: 'chartServerHealth',     name: 'Server Health & Quota',          section: 'raft',    order: 18 },
-    { id: 'chartSnapshotDefrag',   name: 'Snapshot & Defrag Duration',     section: 'disk',    order: 19 },
-    { id: 'chartBackendBreakdown', name: 'Backend Commit Breakdown',       section: 'disk',    order: 20 },
-    { id: 'chartMVCCCompaction',   name: 'MVCC Revisions & Compaction',    section: 'storage', order: 21 },
-    { id: 'chartWatcherEvents',    name: 'Watcher & Events',               section: 'storage', order: 22 },
-    { id: 'chartLeaseActivity',    name: 'Lease Activity',                 section: 'lease',   order: 23 },
-    { id: 'chartActivePeersGRPC',  name: 'Active Peers & gRPC Messages',   section: 'network', order: 24 },
+    { id: 'chartServerHealth',     name: 'Server Health & Quota',          section: 'raft',    order: 19 },
+    { id: 'chartSnapshotDefrag',   name: 'Snapshot & Defrag Duration',     section: 'disk',    order: 20 },
+    { id: 'chartBackendBreakdown', name: 'Backend Commit Breakdown',       section: 'disk',    order: 21 },
+    { id: 'chartMVCCCompaction',   name: 'MVCC Revisions & Compaction',    section: 'storage', order: 22 },
+    { id: 'chartWatcherEvents',    name: 'Watcher & Events',               section: 'storage', order: 23 },
+    { id: 'chartLeaseActivity',    name: 'Lease Activity',                 section: 'lease',   order: 24 },
+    { id: 'chartActivePeersGRPC',  name: 'Active Peers & gRPC Messages',   section: 'network', order: 25 },
 ];
 
 const SECTION_META = {
@@ -378,6 +379,10 @@ function updateBanner(metrics) {
     const keys = metrics['etcd_mvcc_keys_total'];
     document.getElementById('bannerKeys').textContent = keys !== undefined ? Math.round(keys).toLocaleString() : '-';
 
+    // Lease Total
+    const leaseCount = metrics['etcd_lease_count'];
+    document.getElementById('bannerLeaseCount').textContent = leaseCount !== undefined ? Math.round(leaseCount).toLocaleString() : '-';
+
     // Backend Commit P99
     const commitP99 = metrics['etcd_disk_backend_commit_duration_seconds_p99'];
     const commitEl = document.getElementById('bannerCommitP99');
@@ -493,7 +498,21 @@ function updateLeaderChanges(data) {
         xAxis: { type: 'time', ...AXIS_STYLE_() },
         yAxis: { type: 'value', ...AXIS_STYLE_() },
         series: [
-            makeSeries('Leader Changes', COLORS_().orange, data['etcd_server_leader_changes_seen_total']),
+            makeSeries('Leader Changes', COLORS_().orange, data['etcd_server_leader_changes_seen_total'])
+        ]
+    });
+}
+
+function updateSlowOps(data) {
+    const chart = charts['chartSlowOps'];
+    if (!chart) return;
+    chart.setOption({
+        tooltip: TOOLTIP_(),
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: { type: 'value', ...AXIS_STYLE_() },
+        series: [
             makeSeries('Slow Apply', COLORS_().red, data['etcd_server_slow_apply_total']),
             makeSeries('Slow Read Index', COLORS_().purple, data['etcd_server_slow_read_indexes_total'])
         ]
@@ -1225,6 +1244,7 @@ async function refresh() {
     // Update all charts
     updateRaftProposals(rangeData);
     updateLeaderChanges(rangeData);
+    updateSlowOps(rangeData);
     updateProposalLag(rangeData);
     updateProposalFailedRate(rangeData);
     updateWALFsync(rangeData);

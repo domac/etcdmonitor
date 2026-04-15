@@ -119,6 +119,14 @@
         </div>
         <div class="key-metric-divider"></div>
         <div class="key-metric">
+            <div class="key-metric-icon keys">L</div>
+            <div class="key-metric-info">
+                <div class="key-metric-label">Lease Total</div>
+                <div class="key-metric-value" id="bannerLeaseCount">-</div>
+            </div>
+        </div>
+        <div class="key-metric-divider"></div>
+        <div class="key-metric">
             <div class="key-metric-icon commit">B</div>
             <div class="key-metric-info">
                 <div class="key-metric-label">Backend Commit P99</div>
@@ -193,10 +201,17 @@
         </div>
         <div class="panel" data-panel-id="chartLeaderChanges">
             <div class="panel-header">
-                <span class="panel-title">Leader Changes & Slow Operations</span>
+                <span class="panel-title">Leader Changes</span>
                 <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartLeaderChanges"></div>
+        </div>
+        <div class="panel" data-panel-id="chartSlowOps">
+            <div class="panel-header">
+                <span class="panel-title">Slow Operations</span>
+                <span class="panel-header-actions"><span class="panel-tag">Counter</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
+            </div>
+            <div class="panel-body" id="chartSlowOps"></div>
         </div>
         <div class="panel" data-panel-id="chartProposalLag">
             <div class="panel-header">
