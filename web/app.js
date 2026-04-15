@@ -461,11 +461,11 @@ function updateCards(metrics) {
 
     // Raft Term
     const raftTerm = metrics['raft_term'];
-    document.getElementById('cardRaftTerm').textContent = raftTerm !== undefined ? formatNumber(raftTerm) : '-';
+    document.getElementById('cardRaftTerm').textContent = raftTerm !== undefined ? Math.round(raftTerm).toString() : '-';
 
     // Raft Index（直接显示完整数字）
     const raftIndex = metrics['raft_index'];
-    document.getElementById('cardRaftIndex').textContent = raftIndex !== undefined ? Math.round(raftIndex).toLocaleString() : '-';
+    document.getElementById('cardRaftIndex').textContent = raftIndex !== undefined ? Math.round(raftIndex).toString() : '-';
 }
 
 // === Update Charts ===
