@@ -30,6 +30,7 @@
 - **多端点故障转移** - 支持逗号分隔的多地址配置，全局健康管理，自动恢复
 - **KV 树管理** - 浏览、创建、编辑、删除键值，支持树形/列表视图，兼容 etcd v3 和 v2
 - **KV 树搜索** - 实时 key 过滤，保留层级关系，60 秒后台索引刷新
+- **运维面板** - 集群运维操作中心：碎片整理、快照备份、告警管理、Leader 迁移、HashKV 一致性校验、审计日志（支持排序、分页、CSV 导出）
 - **80+ 指标，25 个图表** - 覆盖 Raft、磁盘 I/O、MVCC、Lease、网络、gRPC、Go 运行时
 - **Dashboard 登录认证** - 自动检测 etcd 认证状态；启用时需使用 etcd 凭据登录
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
@@ -114,6 +115,10 @@ kv_manager:
   request_timeout: 30                       # etcd 请求超时（秒）
   max_value_size: 2097152                   # 最大 value 大小（字节），默认 2MB
 
+ops:
+  ops_enable: true                          # 启用运维面板（设为 false 隐藏 Ops Tab，/api/ops/* 返回 403）
+  audit_retention_days: 7                   # 审计日志保留天数，超期自动清理
+
 log:
   dir: "logs"
   filename: "etcdmonitor.log"
@@ -148,6 +153,8 @@ log:
 | `kv_manager.connect_timeout` | KV 操作的 etcd 连接超时（秒） | `5` |
 | `kv_manager.request_timeout` | KV 操作的 etcd 请求超时（秒） | `30` |
 | `kv_manager.max_value_size` | KV 操作最大 value 大小（字节） | `2097152`（2MB） |
+| `ops.ops_enable` | 启用运维面板；设为 `false` 时隐藏 Ops Tab，`/api/ops/*` 返回 403 | `true` |
+| `ops.audit_retention_days` | 审计日志保留天数，超期自动清理 | `7` |
 | `log.dir` | 日志文件目录 | `logs` |
 | `log.filename` | 日志文件名 | `etcdmonitor.log` |
 | `log.level` | 日志级别：debug, info, warn, error | `info` |
@@ -160,27 +167,28 @@ log:
 ## 架构
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                 etcdmonitor（单一二进制）                    │
-│                                                            │
-│  ┌───────────┐   ┌──────────┐   ┌──────────────────────┐ │
-│  │  采集器    │──▶│  SQLite  │◀──│  HTTP/S API          │ │
-│  │（30s 轮询）│   │（按成员   │   │  /api/current        │ │
-│  │  并发采集  │   │  存储）   │   │  /api/range          │ │
-│  └─────┬──┬──┘   └──────────┘   │  /api/members        │ │
-│        │  │                      │  /api/status          │ │
-│  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*         │ │
-│  │  健康管理  │   │ 用户偏好 │◀──│  /api/user/*         │ │
-│  │（15s 检查）│   │ (JSON)   │   │  /api/kv/v3/*        │ │
-│  └─────┬─────┘   └──────────┘   │  /api/kv/v2/*        │ │
-│        │                         └──────────┬───────────┘ │
-│        │                                     │            │
-│  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────┐ │
-│  │    etcd     │   │KV 管理器 │──▶│  Dashboard         │ │
-│  │  /metrics   │   │ v3 + v2  │   │  监控 + KV 树管理   │ │
-│  │  x N 节点   │   │按请求连接│   │  登录 / 配置        │ │
-│  └─────────────┘   └──────────┘   └────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                   etcdmonitor（单一二进制）                      │
+│                                                                │
+│  ┌───────────┐   ┌──────────┐   ┌────────────────────────┐   │
+│  │  采集器    │──▶│  SQLite  │◀──│  HTTP/S API            │   │
+│  │（30s 轮询）│   │（按成员   │   │  /api/current          │   │
+│  │  并发采集  │   │  存储）   │   │  /api/range            │   │
+│  └─────┬──┬──┘   └──────────┘   │  /api/members          │   │
+│        │  │                      │  /api/status            │   │
+│  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*           │   │
+│  │  健康管理  │   │ 用户偏好 │◀──│  /api/user/*           │   │
+│  │（15s 检查）│   │ (JSON)   │   │  /api/kv/v3/*          │   │
+│  └─────┬─────┘   └──────────┘   │  /api/kv/v2/*          │   │
+│        │                         │  /api/ops/*            │   │
+│        │                         └──────────┬─────────────┘   │
+│        │                                     │                │
+│  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────────┐ │
+│  │    etcd     │   │KV 管理器 │──▶│  Dashboard             │ │
+│  │  /metrics   │   │ v3 + v2  │   │  监控 + KV 树管理       │ │
+│  │  x N 节点   │   │按请求连接│   │  运维面板 + 登录        │ │
+│  └─────────────┘   └──────────┘   └────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## 监控面板
@@ -445,6 +453,18 @@ sudo ./uninstall.sh
 | `/api/kv/v2/get?key=/foo` | GET | 是 | 获取单个键的值和元数据 |
 | `/api/kv/v2/put` | PUT | 是 | 创建或更新键（JSON body: key, value, ttl, dir） |
 | `/api/kv/v2/delete` | POST | 是 | 删除键或目录（JSON body: key, dir） |
+
+### 运维操作 API
+
+| 端点 | 方法 | 认证 | 说明 |
+|---|---|---|---|
+| `/api/ops/defragment` | POST | 是 | 对指定成员执行碎片整理（JSON body: member_id） |
+| `/api/ops/snapshot` | GET | 是 | 从指定成员下载快照（query: member_id） |
+| `/api/ops/alarms` | GET | 是 | 查看集群活跃告警列表 |
+| `/api/ops/alarms/disarm` | POST | 是 | 解除指定告警（JSON body: member_id, alarm_type） |
+| `/api/ops/move-leader` | POST | 是 | 迁移 Leader 到目标成员（JSON body: target_member_id） |
+| `/api/ops/hashkv` | POST | 是 | 跨成员 HashKV 数据一致性校验 |
+| `/api/ops/audit-logs` | GET | 是 | 查询审计日志（query: page, page_size, operation） |
 
 > **认证说明**：当 etcd 启用认证时，受保护端点需要有效会话（通过 `Authorization: Bearer <token>` 请求头）。未启用 etcd 认证时，所有端点开放访问。
 
