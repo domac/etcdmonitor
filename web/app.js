@@ -1408,6 +1408,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         authRequired = !!authData.auth_required;
+
+        // 启用/隐藏 Ops Tab
+        if (authData.ops_enabled) {
+            opsEnabled = true;
+            document.getElementById('headerViewOps').style.display = '';
+            // 三态模式：更新 track 和 slider 为 3 段
+            document.querySelector('.kv-toggle-track-3').classList.add('three-way');
+        }
     } catch (e) {
         console.error('Auth status check failed:', e);
         showLoadingError('无法连接服务，请检查网络后刷新');
@@ -1751,57 +1759,68 @@ async function logout() {
     window.location.href = '/login.html';
 }
 
-// === View Toggle (Dashboard <-> KV Manager) ===
-let currentView = 'dashboard'; // 'dashboard' or 'kv'
+// === View Toggle (Dashboard <-> KV Manager <-> Ops) ===
+let currentView = 'dashboard'; // 'dashboard', 'kv', or 'ops'
+let opsEnabled = false;
 
 function toggleView() {
     if (currentView === 'dashboard') {
-        switchToKVView();
+        switchToView('kv');
     } else {
-        switchToDashboardView();
+        switchToView('dashboard');
     }
 }
 
-function switchToKVView() {
-    if (currentView === 'kv') return;
-    currentView = 'kv';
-    // Hide dashboard content
-    document.querySelector('.main').style.display = 'none';
-    // Show KV section
-    document.getElementById('kvSection').style.display = '';
-    // Update header toggle
-    document.getElementById('headerViewMonitor').classList.remove('active');
-    document.getElementById('headerViewKV').classList.add('active');
-    document.getElementById('headerViewSlider').classList.add('right');
-    // Hide dashboard-specific controls
-    document.getElementById('timeRange').style.display = 'none';
-    document.getElementById('refreshInterval').style.display = 'none';
-    document.getElementById('refreshBtn').style.display = 'none';
-    document.getElementById('panelConfigBtn').style.display = 'none';
-    document.getElementById('lastUpdate').style.display = '';
-    // Initialize KV module if available
-    if (typeof kvInit === 'function') {
-        kvInit();
+function switchToView(view) {
+    if (currentView === view) return;
+    currentView = view;
+
+    var mainEl = document.querySelector('.main');
+    var kvEl = document.getElementById('kvSection');
+    var opsEl = document.getElementById('opsSection');
+    var monBtn = document.getElementById('headerViewMonitor');
+    var kvBtn = document.getElementById('headerViewKV');
+    var opsBtn = document.getElementById('headerViewOps');
+    var slider = document.getElementById('headerViewSlider');
+
+    // Hide all sections
+    mainEl.style.display = 'none';
+    kvEl.style.display = 'none';
+    opsEl.style.display = 'none';
+
+    // Reset toggle state
+    monBtn.classList.remove('active');
+    kvBtn.classList.remove('active');
+    opsBtn.classList.remove('active');
+    slider.classList.remove('pos-0', 'pos-1', 'pos-2');
+
+    // Dashboard-specific controls
+    var dashControls = ['timeRange', 'refreshInterval', 'refreshBtn', 'panelConfigBtn'];
+
+    if (view === 'dashboard') {
+        mainEl.style.display = '';
+        monBtn.classList.add('active');
+        slider.classList.add('pos-0');
+        dashControls.forEach(function(id) { document.getElementById(id).style.display = ''; });
+        document.getElementById('lastUpdate').style.display = '';
+        Object.values(charts).forEach(function(c) { if (c) c.resize(); });
+    } else if (view === 'kv') {
+        kvEl.style.display = '';
+        kvBtn.classList.add('active');
+        slider.classList.add('pos-1');
+        dashControls.forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+        document.getElementById('lastUpdate').style.display = '';
+        if (typeof kvInit === 'function') { kvInit(); }
+    } else if (view === 'ops') {
+        opsEl.style.display = '';
+        opsBtn.classList.add('active');
+        slider.classList.add(opsEnabled ? 'pos-2' : 'pos-1');
+        dashControls.forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+        document.getElementById('lastUpdate').style.display = 'none';
+        if (typeof opsInit === 'function') { opsInit(); }
     }
 }
 
-function switchToDashboardView() {
-    if (currentView === 'dashboard') return;
-    currentView = 'dashboard';
-    // Show dashboard content
-    document.querySelector('.main').style.display = '';
-    // Hide KV section
-    document.getElementById('kvSection').style.display = 'none';
-    // Update header toggle
-    document.getElementById('headerViewMonitor').classList.add('active');
-    document.getElementById('headerViewKV').classList.remove('active');
-    document.getElementById('headerViewSlider').classList.remove('right');
-    // Show dashboard-specific controls
-    document.getElementById('timeRange').style.display = '';
-    document.getElementById('refreshInterval').style.display = '';
-    document.getElementById('refreshBtn').style.display = '';
-    document.getElementById('panelConfigBtn').style.display = '';
-    document.getElementById('lastUpdate').style.display = '';
-    // Refresh charts (may need resize after being hidden)
-    Object.values(charts).forEach(function(c) { if (c) c.resize(); });
-}
+// Keep old function names for backward compatibility
+function switchToKVView() { switchToView('kv'); }
+function switchToDashboardView() { switchToView('dashboard'); }

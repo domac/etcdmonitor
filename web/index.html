@@ -31,12 +31,13 @@
                     <option value="">Loading...</option>
                 </select>
             </div>
-            <!-- View Toggle: Monitor / KV -->
+            <!-- View Toggle: Monitor / KV / Ops -->
             <div class="kv-toggle-group kv-toggle-sm" id="headerViewToggle">
-                <div class="kv-toggle-track">
-                    <div class="kv-toggle-slider" id="headerViewSlider"></div>
-                    <button class="kv-toggle-option active" id="headerViewMonitor" onclick="switchToDashboardView()">Monitor</button>
-                    <button class="kv-toggle-option" id="headerViewKV" onclick="switchToKVView()">KV Tree</button>
+                <div class="kv-toggle-track kv-toggle-track-3">
+                    <div class="kv-toggle-slider kv-toggle-slider-3" id="headerViewSlider"></div>
+                    <button class="kv-toggle-option active" id="headerViewMonitor" onclick="switchToView('dashboard')">Monitor</button>
+                    <button class="kv-toggle-option" id="headerViewKV" onclick="switchToView('kv')">KV Tree</button>
+                    <button class="kv-toggle-option" id="headerViewOps" onclick="switchToView('ops')" style="display:none">Ops</button>
                 </div>
             </div>
         </div>
@@ -409,6 +410,11 @@
     </div>
 </main>
 
+<!-- Ops Panel Section (hidden by default) -->
+<section class="ops-section" id="opsSection" style="display:none">
+    <div class="ops-container" id="opsContainer"></div>
+</section>
+
 <!-- KV Management Section (hidden by default) -->
 <section class="kv-section" id="kvSection" style="display:none">
     <!-- Cluster Info Bar -->
@@ -551,6 +557,7 @@
 
 <script src="app.js"></script>
 <script src="kv.js"></script>
+<script src="ops.js"></script>
 
 <!-- Panel Config Modal -->
 <div class="modal-overlay" id="panelConfigModal" style="display:none" onclick="if(event.target===this)closePanelConfig()">

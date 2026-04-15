@@ -21,6 +21,7 @@ import (
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/kvmanager"
 	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/ops"
 	"etcdmonitor/internal/prefs"
 	"etcdmonitor/internal/storage"
 
@@ -127,6 +128,15 @@ func main() {
 		kvHandler.RegisterRoutes(protected)
 		defer kvHandler.Close()
 		logger.Info("KV manager initialized")
+	}
+
+	// 初始化 Ops 运维模块
+	if cfg.OpsEnabled() {
+		opsHandler := ops.New(cfg, store, coll, healthMgr, sessionStore, dashboardAuthRequired)
+		opsHandler.RegisterRoutes(protected)
+		logger.Info("Ops panel initialized")
+	} else {
+		logger.Info("Ops panel disabled by configuration")
 	}
 
 	// 静态文件服务（嵌入的 web 目录）

@@ -239,3 +239,156 @@ func TestCheckEndpointChange_EndpointChanged(t *testing.T) {
 		t.Errorf("expected empty data after endpoint change, got %v", result)
 	}
 }
+
+func TestStoreAuditLog(t *testing.T) {
+	s := newTestStorage(t, "http://127.0.0.1:2379")
+
+	entry := AuditEntry{
+		Timestamp:  time.Now().Unix(),
+		Username:   "admin",
+		Operation:  "defragment",
+		Target:     "member1",
+		Params:     `{"member_id":"abc123"}`,
+		Result:     "success",
+		DurationMs: 1500,
+		Success:    true,
+	}
+
+	if err := s.StoreAuditLog(entry); err != nil {
+		t.Fatalf("StoreAuditLog() error: %v", err)
+	}
+
+	// 查询验证
+	entries, total, err := s.QueryAuditLogs(AuditFilter{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total=1, got %d", total)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Username != "admin" {
+		t.Errorf("username = %q, want %q", entries[0].Username, "admin")
+	}
+	if entries[0].Operation != "defragment" {
+		t.Errorf("operation = %q, want %q", entries[0].Operation, "defragment")
+	}
+	if !entries[0].Success {
+		t.Error("expected success=true")
+	}
+}
+
+func TestQueryAuditLogs_FilterByOperation(t *testing.T) {
+	s := newTestStorage(t, "http://127.0.0.1:2379")
+
+	now := time.Now().Unix()
+	for _, op := range []string{"defragment", "snapshot", "defragment", "move_leader"} {
+		if err := s.StoreAuditLog(AuditEntry{
+			Timestamp: now, Username: "admin", Operation: op, Success: true,
+		}); err != nil {
+			t.Fatalf("StoreAuditLog() error: %v", err)
+		}
+	}
+
+	// 筛选 defragment
+	entries, total, err := s.QueryAuditLogs(AuditFilter{Operation: "defragment", Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("expected total=2 for defragment, got %d", total)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(entries))
+	}
+}
+
+func TestQueryAuditLogs_Pagination(t *testing.T) {
+	s := newTestStorage(t, "http://127.0.0.1:2379")
+
+	now := time.Now().Unix()
+	for i := 0; i < 5; i++ {
+		if err := s.StoreAuditLog(AuditEntry{
+			Timestamp: now + int64(i), Username: "admin", Operation: "defragment", Success: true,
+		}); err != nil {
+			t.Fatalf("StoreAuditLog() error: %v", err)
+		}
+	}
+
+	// 第一页，每页 2 条
+	entries, total, err := s.QueryAuditLogs(AuditFilter{Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	if total != 5 {
+		t.Errorf("expected total=5, got %d", total)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries on page 1, got %d", len(entries))
+	}
+
+	// 第三页，应该只有 1 条
+	entries, _, err = s.QueryAuditLogs(AuditFilter{Page: 3, PageSize: 2})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 entry on page 3, got %d", len(entries))
+	}
+}
+
+func TestQueryAuditLogs_TimeDescOrder(t *testing.T) {
+	s := newTestStorage(t, "http://127.0.0.1:2379")
+
+	for i := 0; i < 3; i++ {
+		if err := s.StoreAuditLog(AuditEntry{
+			Timestamp: int64(1000 + i), Username: "admin", Operation: "test", Success: true,
+		}); err != nil {
+			t.Fatalf("StoreAuditLog() error: %v", err)
+		}
+	}
+
+	entries, _, err := s.QueryAuditLogs(AuditFilter{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	// 应该按时间倒序
+	for i := 1; i < len(entries); i++ {
+		if entries[i].Timestamp > entries[i-1].Timestamp {
+			t.Error("entries not in descending timestamp order")
+			break
+		}
+	}
+}
+
+func TestCheckEndpointChange_AuditLogPreserved(t *testing.T) {
+	s := newTestStorage(t, "http://127.0.0.1:2379")
+
+	if err := s.CheckEndpointChange(); err != nil {
+		t.Fatalf("first CheckEndpointChange() error: %v", err)
+	}
+
+	// 写入审计日志
+	if err := s.StoreAuditLog(AuditEntry{
+		Timestamp: time.Now().Unix(), Username: "admin", Operation: "defragment", Success: true,
+	}); err != nil {
+		t.Fatalf("StoreAuditLog() error: %v", err)
+	}
+
+	// 切换 endpoint（触发 metrics 清理）
+	s.cfg.Etcd.Endpoint = "http://10.0.1.1:2379"
+	if err := s.CheckEndpointChange(); err != nil {
+		t.Fatalf("CheckEndpointChange() error: %v", err)
+	}
+
+	// 审计日志应该保留
+	entries, total, err := s.QueryAuditLogs(AuditFilter{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error: %v", err)
+	}
+	if total != 1 || len(entries) != 1 {
+		t.Errorf("audit log should be preserved after endpoint change, got total=%d entries=%d", total, len(entries))
+	}
+}
