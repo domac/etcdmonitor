@@ -41,7 +41,7 @@ func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, hea
 		authRequired: authRequired,
 		sessionStore: sessionStore,
 		prefsStore:   prefsStore,
-		authHandler:  auth.NewAuthHandler(cfg, sessionStore, healthMgr, authRequired, version),
+		authHandler:  auth.NewAuthHandler(cfg, store, sessionStore, healthMgr, authRequired, version),
 		version:      version,
 	}
 }

@@ -31,7 +31,7 @@ func newTestAPI(authRequired bool) (*API, *auth.MemorySessionStore) {
 		cfg:          cfg,
 		authRequired: authRequired,
 		sessionStore: store,
-		authHandler:  auth.NewAuthHandler(cfg, store, nil, authRequired),
+		authHandler:  auth.NewAuthHandler(cfg, nil, store, nil, authRequired),
 	}
 	return a, store
 }

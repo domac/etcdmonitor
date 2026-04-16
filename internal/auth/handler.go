@@ -8,6 +8,7 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
+	"etcdmonitor/internal/storage"
 	"etcdmonitor/internal/tls"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,7 @@ type LoginRequest struct {
 // AuthHandler 认证相关的 HTTP 处理器
 type AuthHandler struct {
 	cfg          *config.Config
+	store        *storage.Storage
 	sessionStore *MemorySessionStore
 	healthMgr    *health.Manager
 	authRequired bool
@@ -30,13 +32,14 @@ type AuthHandler struct {
 }
 
 // NewAuthHandler 创建 AuthHandler 实例
-func NewAuthHandler(cfg *config.Config, sessionStore *MemorySessionStore, healthMgr *health.Manager, authRequired bool, version ...string) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, store *storage.Storage, sessionStore *MemorySessionStore, healthMgr *health.Manager, authRequired bool, version ...string) *AuthHandler {
 	v := ""
 	if len(version) > 0 {
 		v = version[0]
 	}
 	return &AuthHandler{
 		cfg:          cfg,
+		store:        store,
 		sessionStore: sessionStore,
 		healthMgr:    healthMgr,
 		authRequired: authRequired,
@@ -44,9 +47,29 @@ func NewAuthHandler(cfg *config.Config, sessionStore *MemorySessionStore, health
 	}
 }
 
+// logAudit 写入审计日志（非阻塞）
+func (h *AuthHandler) logAudit(username, operation, target, result string, durationMs int64, success bool) {
+	if h.store == nil {
+		return
+	}
+	entry := storage.AuditEntry{
+		Timestamp:  time.Now().Unix(),
+		Username:   username,
+		Operation:  operation,
+		Target:     target,
+		Result:     result,
+		DurationMs: durationMs,
+		Success:    success,
+	}
+	if err := h.store.StoreAuditLog(entry); err != nil {
+		logger.Warnf("[Auth] Failed to write audit log: %v", err)
+	}
+}
+
 // HandleLogin 处理登录请求
 // 通过 etcd 验证凭据，成功后创建会话并设置 Cookie
 func (h *AuthHandler) HandleLogin(c *gin.Context) {
+	start := time.Now()
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password required"})
@@ -55,7 +78,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	// 通过 etcd SDK 验证凭据
 	if err := verifyCredentials(h.cfg, h.healthMgr, req.Username, req.Password); err != nil {
+		elapsed := time.Since(start).Milliseconds()
 		logger.Warnf("[Auth] Login failed for user %s: %v", req.Username, err)
+		h.logAudit(req.Username, "login", c.ClientIP(), "用户名或密码错误", elapsed, false)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
@@ -67,7 +92,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	}
 	session, err := h.sessionStore.Create(req.Username, timeout)
 	if err != nil {
+		elapsed := time.Since(start).Milliseconds()
 		logger.Errorf("[Auth] Session creation failed: %v", err)
+		h.logAudit(req.Username, "login", c.ClientIP(), "session creation failed", elapsed, false)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
 		return
 	}
@@ -83,7 +110,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	elapsed := time.Since(start).Milliseconds()
 	logger.Infof("[Auth] User %s logged in successfully", req.Username)
+	h.logAudit(req.Username, "login", c.ClientIP(), "ok", elapsed, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"username":      session.Username,
@@ -95,9 +124,11 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 // HandleLogout 处理登出请求
 func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	token := ExtractToken(c.Request)
+	username := ""
 	if token != "" {
 		session := h.sessionStore.Get(token)
 		if session != nil {
+			username = session.Username
 			logger.Infof("[Auth] User %s logged out", session.Username)
 		}
 		h.sessionStore.Delete(token)
@@ -111,6 +142,10 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 		MaxAge:   -1,
 		HttpOnly: true,
 	})
+
+	if username != "" {
+		h.logAudit(username, "logout", c.ClientIP(), "ok", 0, true)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "已登出"})
 }
