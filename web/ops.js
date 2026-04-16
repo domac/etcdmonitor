@@ -117,8 +117,8 @@ async function opsGetStatus() {
 async function opsLoadVersion() {
     var status = await opsGetStatus();
     opsVersion = (status && status.etcd_version) ? status.etcd_version : '-';
-    // Update version display if header element exists
-    var versionEl = document.getElementById('opsVersionValue');
+    // Update version display in the ops info bar
+    var versionEl = document.getElementById('opsVersion');
     if (versionEl) {
         versionEl.textContent = opsVersion;
     }
@@ -134,10 +134,7 @@ async function opsGetMembers() {
 function opsPanelHeader(title) {
     return '<div class="ops-panel-header">' +
         '<div class="ops-panel-title">' + title + '</div>' +
-        '<div class="ops-panel-info">' +
-        '<span class="ops-info-label">Version:</span> ' +
-        '<span class="ops-info-value" id="opsVersionValue">' + opsVersion + '</span>' +
-        '</div></div>';
+        '</div>';
 }
 
 // === Defragment Panel ===

@@ -1848,7 +1848,7 @@ function switchToView(view) {
         opsBtn.classList.add('active');
         slider.classList.add(opsEnabled ? 'pos-2' : 'pos-1');
         dashControls.forEach(function(id) { document.getElementById(id).style.display = 'none'; });
-        document.getElementById('lastUpdate').style.display = 'none';
+        document.getElementById('lastUpdate').style.display = '';
         if (typeof opsInit === 'function') { opsInit(); }
     }
 }
