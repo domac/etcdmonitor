@@ -4,11 +4,13 @@
 
 var opsInitialized = false;
 var opsActivePanel = '';
+var opsVersion = '-';
 
 function opsInit() {
     if (opsInitialized) return;
     opsInitialized = true;
     opsRenderLayout();
+    opsLoadVersion();
     opsSelectPanel('audit');
 }
 
@@ -103,6 +105,25 @@ function opsConfirm(title, message) {
     });
 }
 
+
+// === Version Management ===
+async function opsGetStatus() {
+    var resp = await opsFetchJSON('/api/status');
+    if (!resp) return { etcd_version: '-' };
+    var data = await resp.json();
+    return data || { etcd_version: '-' };
+}
+
+async function opsLoadVersion() {
+    var status = await opsGetStatus();
+    opsVersion = (status && status.etcd_version) ? status.etcd_version : '-';
+    // Update version display if header element exists
+    var versionEl = document.getElementById('opsVersionValue');
+    if (versionEl) {
+        versionEl.textContent = opsVersion;
+    }
+}
+
 async function opsGetMembers() {
     var resp = await opsFetchJSON('/api/members');
     if (!resp) return [];
@@ -111,7 +132,12 @@ async function opsGetMembers() {
 }
 
 function opsPanelHeader(title) {
-    return '<div class="ops-panel-header"><div class="ops-panel-title">' + title + '</div></div>';
+    return '<div class="ops-panel-header">' +
+        '<div class="ops-panel-title">' + title + '</div>' +
+        '<div class="ops-panel-info">' +
+        '<span class="ops-info-label">Version:</span> ' +
+        '<span class="ops-info-value" id="opsVersionValue">' + opsVersion + '</span>' +
+        '</div></div>';
 }
 
 // === Defragment Panel ===

@@ -1598,15 +1598,40 @@ body {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
-.ops-panel-header {
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
-}
 .ops-panel-title {
     font-size: 18px;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+/* Ops Panel Header Layout */
+.ops-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ops-panel-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.ops-info-label {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.ops-info-value {
+    color: var(--text-primary);
+    font-family: monospace;
+    background-color: var(--background-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
 }
 
 /* Ops Table */
