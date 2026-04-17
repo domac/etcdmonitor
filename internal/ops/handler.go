@@ -55,6 +55,8 @@ func (h *OpsHandler) RegisterRoutes(group *gin.RouterGroup) {
 		ops.POST("/alarms/disarm", h.handleAlarmDisarm)
 		ops.POST("/move-leader", h.handleMoveLeader)
 		ops.POST("/hashkv", h.handleHashKV)
+		ops.POST("/compact", h.handleCompact)
+		ops.GET("/compact/revision", h.handleCompactRevision)
 		ops.GET("/audit-logs", h.handleAuditLogs)
 	}
 }
@@ -624,6 +626,121 @@ func (h *OpsHandler) handleHashKV(c *gin.Context) {
 		"revision":    revision,
 		"results":     results,
 		"duration_ms": durationMs,
+	})
+}
+
+// handleCompact 执行集群级 compact 操作
+func (h *OpsHandler) handleCompact(c *gin.Context) {
+	var req struct {
+		RetainCount int64 `json:"retain_count"`
+		Physical    bool  `json:"physical"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	if req.RetainCount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "retain_count must be a positive integer"})
+		return
+	}
+
+	username := h.getUsername(c)
+
+	logger.Infof("[Ops] Compact started: retain_count=%d physical=%v by=%s", req.RetainCount, req.Physical, username)
+
+	cli, err := h.newEtcdClient()
+	if err != nil {
+		errMsg := fmt.Sprintf("create etcd client: %v", err)
+		logger.Errorf("[Ops] Compact failed: %s", errMsg)
+		h.logAudit(username, "compact", "cluster",
+			fmt.Sprintf(`{"retain_count":%d,"physical":%v}`, req.RetainCount, req.Physical),
+			errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+	defer cli.Close()
+
+	// 获取当前 Revision
+	statusResp, err := h.healthMgr.StatusFromHealthy(cli)
+	if err != nil {
+		errMsg := fmt.Sprintf("get cluster status: %v", err)
+		logger.Errorf("[Ops] Compact failed: %s", errMsg)
+		h.logAudit(username, "compact", "cluster",
+			fmt.Sprintf(`{"retain_count":%d,"physical":%v}`, req.RetainCount, req.Physical),
+			errMsg, 0, false)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+
+	currentRevision := statusResp.Header.Revision
+	targetRevision := currentRevision - req.RetainCount
+
+	if targetRevision <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":            "retain_count is too large, computed target revision is non-positive",
+			"current_revision": currentRevision,
+			"retain_count":     req.RetainCount,
+		})
+		return
+	}
+
+	// 构建 compact 选项
+	var opts []clientv3.CompactOption
+	if req.Physical {
+		opts = append(opts, clientv3.WithCompactPhysical())
+	}
+
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	_, err = cli.Compact(ctx, targetRevision, opts...)
+	durationMs := time.Since(start).Milliseconds()
+
+	params := fmt.Sprintf(`{"retain_count":%d,"physical":%v,"target_revision":%d}`, req.RetainCount, req.Physical, targetRevision)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("compact failed: %v", err)
+		logger.Warnf("[Ops] Compact failed: duration=%dms error=%v", durationMs, err)
+		h.logAudit(username, "compact", "cluster", params, errMsg, durationMs, false)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":       errMsg,
+			"duration_ms": durationMs,
+		})
+		return
+	}
+
+	logger.Infof("[Ops] Compact completed: current_revision=%d target_revision=%d physical=%v duration=%dms",
+		currentRevision, targetRevision, req.Physical, durationMs)
+	h.logAudit(username, "compact", "cluster", params, "success", durationMs, true)
+	c.JSON(http.StatusOK, gin.H{
+		"message":          "compact completed",
+		"current_revision": currentRevision,
+		"target_revision":  targetRevision,
+		"retain_count":     req.RetainCount,
+		"physical":         req.Physical,
+		"duration_ms":      durationMs,
+	})
+}
+
+// handleCompactRevision 返回当前集群 Revision，供前端面板展示
+func (h *OpsHandler) handleCompactRevision(c *gin.Context) {
+	cli, err := h.newEtcdClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("create etcd client: %v", err)})
+		return
+	}
+	defer cli.Close()
+
+	statusResp, err := h.healthMgr.StatusFromHealthy(cli)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("get cluster status: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"revision": statusResp.Header.Revision,
 	})
 }
 

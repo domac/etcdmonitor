@@ -30,7 +30,7 @@
 - **多端点故障转移** - 支持逗号分隔的多地址配置，全局健康管理，自动恢复
 - **KV 树管理** - 浏览、创建、编辑、删除键值，支持树形/列表视图，兼容 etcd v3 和 v2
 - **KV 树搜索** - 实时 key 过滤，保留层级关系，60 秒后台索引刷新
-- **运维面板** - 集群运维操作中心：碎片整理、快照备份、告警管理、Leader 迁移、HashKV 一致性校验、审计日志（支持排序、分页、CSV 导出）
+- **运维面板** - 集群运维操作中心：碎片整理、快照备份、告警管理、Leader 迁移、HashKV 一致性校验、Compact 集群压缩、审计日志（支持排序、分页、CSV 导出）
 - **80+ 指标，25 个图表** - 覆盖 Raft、磁盘 I/O、MVCC、Lease、网络、gRPC、Go 运行时
 - **Dashboard 登录认证** - 自动检测 etcd 认证状态；启用时需使用 etcd 凭据登录
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
@@ -50,8 +50,8 @@
 ```bash
 # 上传到服务器
 
-unzip etcdmonitor-v0.5.0-linux-amd64.zip
-cd etcdmonitor-v0.5.0-linux-amd64
+unzip etcdmonitor-v0.7.0-linux-amd64.zip
+cd etcdmonitor-v0.7.0-linux-amd64
 
 # 编辑配置
 vim config.yaml
@@ -464,6 +464,8 @@ sudo ./uninstall.sh
 | `/api/ops/alarms/disarm` | POST | 是 | 解除指定告警（JSON body: member_id, alarm_type） |
 | `/api/ops/move-leader` | POST | 是 | 迁移 Leader 到目标成员（JSON body: target_member_id） |
 | `/api/ops/hashkv` | POST | 是 | 跨成员 HashKV 数据一致性校验 |
+| `/api/ops/compact` | POST | 是 | 集群级 Revision 压缩（JSON body: retain_count, physical） |
+| `/api/ops/compact/revision` | GET | 是 | 获取当前集群 Revision（供面板展示参考） |
 | `/api/ops/audit-logs` | GET | 是 | 查询审计日志（query: page, page_size, operation） |
 
 > **认证说明**：当 etcd 启用认证时，受保护端点需要有效会话（通过 `Authorization: Bearer <token>` 请求头）。未启用 etcd 认证时，所有端点开放访问。

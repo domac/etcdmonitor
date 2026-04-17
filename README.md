@@ -30,7 +30,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Multi-endpoint failover** - Comma-separated endpoints with global health management, auto-recovery
 - **KV Tree management** - Browse, create, edit, delete keys with tree/list view, supports etcd v3 & v2
 - **KV Tree search** - Real-time key filtering with hierarchy preservation, 60s background index refresh
-- **Ops panel** - Cluster operations center: Defragment, Snapshot, Alarms, Move Leader, HashKV consistency check, Audit Log with sortable table, pagination, and CSV export
+- **Ops panel** - Cluster operations center: Defragment, Snapshot, Alarms, Move Leader, HashKV consistency check, Compact (cluster-wide revision compaction), Audit Log with sortable table, pagination, and CSV export
 - **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
@@ -50,8 +50,8 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 ```bash
 # Upload to server
 
-unzip etcdmonitor-v0.5.0-linux-amd64.zip
-cd etcdmonitor-v0.5.0-linux-amd64
+unzip etcdmonitor-v0.7.0-linux-amd64.zip
+cd etcdmonitor-v0.7.0-linux-amd64
 
 # Edit config
 vim config.yaml
@@ -464,6 +464,8 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 | `/api/ops/alarms/disarm` | POST | Yes | Disarm a specific alarm (JSON body: member_id, alarm_type) |
 | `/api/ops/move-leader` | POST | Yes | Move leader to target member (JSON body: target_member_id) |
 | `/api/ops/hashkv` | POST | Yes | Run HashKV consistency check across all members |
+| `/api/ops/compact` | POST | Yes | Cluster-wide revision compaction (JSON body: retain_count, physical) |
+| `/api/ops/compact/revision` | GET | Yes | Get current cluster Revision for reference |
 | `/api/ops/audit-logs` | GET | Yes | Query audit logs (query: page, page_size, operation) |
 
 > **Auth**: When etcd auth is enabled, protected endpoints require a valid session (via `Authorization: Bearer <token>` header). When etcd auth is not enabled, all endpoints are open.

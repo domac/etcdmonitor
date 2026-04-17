@@ -21,7 +21,8 @@ var opsMenuItems = [
     { id: 'snapshot', label: 'Snapshot' },
     { id: 'alarm', label: 'Alarms' },
     { id: 'leader', label: 'Move Leader' },
-    { id: 'hashkv', label: 'HashKV Check' }
+    { id: 'hashkv', label: 'HashKV Check' },
+    { id: 'compact', label: 'Compact' }
 ];
 
 // === Layout ===
@@ -53,6 +54,7 @@ function opsSelectPanel(id) {
         'alarm': opsShowAlarm,
         'leader': opsShowMoveLeader,
         'hashkv': opsShowHashKV,
+        'compact': opsShowCompact,
         'audit': opsShowAuditLog
     };
     if (panels[id]) panels[id]();
@@ -437,6 +439,121 @@ async function opsExecHashKV() {
     btn.textContent = 'Run Consistency Check';
 }
 
+// === Compact Panel ===
+async function opsShowCompact() {
+    var content = document.getElementById('opsContentPanel');
+    content.innerHTML = '<div class="ops-panel">' + opsPanelHeader('Compact') +
+        '<div id="opsCompactContent"><div class="ops-spinner"></div> Loading...</div></div>';
+
+    var el = document.getElementById('opsCompactContent');
+
+    // Fetch current revision
+    var revision = '-';
+    try {
+        var resp = await opsFetchJSON('/api/ops/compact/revision');
+        if (resp && resp.ok) {
+            var data = await resp.json();
+            revision = data.revision;
+        }
+    } catch (e) { /* ignore, show '-' */ }
+
+    var html = '<div class="ops-info">' +
+        '<div class="ops-info-row"><span class="ops-info-label">Current Revision</span>' +
+        '<span class="ops-info-value"><span id="opsCompactRevision">' + revision + '</span>' +
+        ' <span class="ops-refresh-icon" onclick="opsRefreshCompactRevision()" title="Refresh revision" style="cursor:pointer;font-size:14px;opacity:0.7">&#x1f504;</span>' +
+        ' <span style="font-size:11px;color:var(--text-secondary)">(reference only)</span></span></div></div>';
+
+    html += '<div style="margin-bottom:16px">' +
+        '<label style="font-size:13px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">Retain Recent Revisions</label>' +
+        '<input type="number" id="opsCompactRetain" class="ops-filter-select" min="1" placeholder="e.g. 1000" style="min-width:200px;padding:6px 10px">' +
+        '</div>';
+
+    html += '<div style="margin-bottom:16px">' +
+        '<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="opsCompactPhysical"> Physical Compaction ' +
+        '<span class="ops-tooltip" style="position:relative;display:inline-block">' +
+        '<span style="font-size:12px;color:var(--text-secondary);border:1px solid var(--text-secondary);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;cursor:help">i</span>' +
+        '<span class="ops-tooltip-text" style="visibility:hidden;position:absolute;bottom:125%;left:50%;transform:translateX(-50%);background:var(--bg-tertiary);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:12px;white-space:nowrap;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.3)">' +
+        'Wait for physical deletion to complete before returning. Slower, but ensures compaction is fully applied.</span></span></label></div>';
+
+    html += '<button class="ops-btn ops-btn-primary" id="opsCompactBtn" onclick="opsExecCompact()">Execute Compact</button>';
+    html += '<div id="opsCompactResult" style="margin-top:12px"></div>';
+    el.innerHTML = html;
+
+    // Tooltip hover behavior
+    var tooltip = el.querySelector('.ops-tooltip');
+    if (tooltip) {
+        var tip = tooltip.querySelector('.ops-tooltip-text');
+        tooltip.onmouseenter = function() { tip.style.visibility = 'visible'; };
+        tooltip.onmouseleave = function() { tip.style.visibility = 'hidden'; };
+    }
+}
+
+async function opsRefreshCompactRevision() {
+    try {
+        var resp = await opsFetchJSON('/api/ops/compact/revision');
+        if (resp && resp.ok) {
+            var data = await resp.json();
+            var el = document.getElementById('opsCompactRevision');
+            if (el) el.textContent = data.revision;
+        }
+    } catch (e) { /* silent fail */ }
+}
+
+async function opsExecCompact() {
+    var retainInput = document.getElementById('opsCompactRetain');
+    var retainCount = parseInt(retainInput.value, 10);
+    if (!retainCount || retainCount <= 0) {
+        opsToast('Please enter a valid retain count (positive integer)', 'error');
+        return;
+    }
+
+    var physical = document.getElementById('opsCompactPhysical').checked;
+
+    var msg = 'Execute cluster-wide compact?<br><br>' +
+        'Retain recent revisions: <strong>' + retainCount + '</strong><br>' +
+        'Physical compaction: <strong>' + (physical ? 'Yes' : 'No') + '</strong><br><br>' +
+        '<span style="font-size:12px;color:var(--text-secondary)">This will remove historical revisions older than the retained count.</span>';
+
+    var confirmed = await opsConfirm('Confirm Compact', msg);
+    if (!confirmed) return;
+
+    var btn = document.getElementById('opsCompactBtn');
+    var result = document.getElementById('opsCompactResult');
+    btn.disabled = true;
+    btn.textContent = 'Compacting...';
+    result.innerHTML = '<span class="ops-spinner"></span> Executing compact...';
+
+    try {
+        var resp = await opsFetchJSON('/api/ops/compact', {
+            method: 'POST',
+            body: JSON.stringify({ retain_count: retainCount, physical: physical })
+        });
+        var data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="ops-result success">' +
+                '\u2713 Compact completed in ' + data.duration_ms + 'ms<br>' +
+                '<table class="ops-table" style="margin-top:8px"><tbody>' +
+                '<tr><td style="font-weight:600">Revision at execution</td><td>' + data.current_revision + '</td></tr>' +
+                '<tr><td style="font-weight:600">Compacted to revision</td><td>' + data.target_revision + '</td></tr>' +
+                '<tr><td style="font-weight:600">Retained</td><td>' + data.retain_count + ' revisions</td></tr>' +
+                '<tr><td style="font-weight:600">Physical</td><td>' + (data.physical ? 'Yes' : 'No') + '</td></tr>' +
+                '</tbody></table></div>';
+            opsToast('Compact completed', 'success');
+            // Refresh the displayed revision
+            opsRefreshCompactRevision();
+        } else {
+            result.innerHTML = '<div class="ops-result error">\u2717 ' + (data.error || 'Compact failed') + '</div>';
+            opsToast('Compact failed', 'error');
+        }
+    } catch (e) {
+        result.innerHTML = '<div class="ops-result error">\u2717 ' + e.message + '</div>';
+        opsToast('Compact failed: ' + e.message, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Execute Compact';
+}
+
 // === Audit Log Panel ===
 var opsAuditPage = 1;
 var opsAuditFilter = '';
@@ -458,7 +575,8 @@ function opsShowAuditLog() {
         '<option value="snapshot">Snapshot</option>' +
         '<option value="alarm_disarm">Alarm Disarm</option>' +
         '<option value="move_leader">Move Leader</option>' +
-        '<option value="hashkv">HashKV</option></select>' +
+        '<option value="hashkv">HashKV</option>' +
+        '<option value="compact">Compact</option></select>' +
         '<button class="ops-export-btn" id="opsExportBtn" onclick="opsExportCSV()">Export CSV</button>' +
         '</div>' +
         '<div id="opsAuditContent"><div class="ops-spinner"></div> Loading...</div></div>';
