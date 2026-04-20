@@ -43,6 +43,7 @@ func newTestRouter(a *API) *gin.Engine {
 }
 
 func TestAuthMiddleware_NoAuth(t *testing.T) {
+	// 新语义：无论 authRequired 参数如何，middleware 均要求有效 session
 	a, _ := newTestAPI(false)
 
 	router := gin.New()
@@ -54,8 +55,8 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200 when auth disabled, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 (no bypass regardless of etcd auth), got %d", w.Code)
 	}
 }
 
@@ -115,6 +116,7 @@ func TestAuthMiddleware_RequiresAuth_InvalidCookie(t *testing.T) {
 }
 
 func TestHandleAuthStatus_NoAuth(t *testing.T) {
+	// 新语义：auth_required 恒为 true（即便构造时传 etcdAuthEnabled=false）
 	a, _ := newTestAPI(false)
 
 	router := gin.New()
@@ -131,8 +133,11 @@ func TestHandleAuthStatus_NoAuth(t *testing.T) {
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
 
-	if resp["auth_required"] != false {
-		t.Errorf("expected auth_required=false, got %v", resp["auth_required"])
+	if resp["auth_required"] != true {
+		t.Errorf("expected auth_required=true (new semantics), got %v", resp["auth_required"])
+	}
+	if resp["authenticated"] != false {
+		t.Errorf("expected authenticated=false, got %v", resp["authenticated"])
 	}
 }
 

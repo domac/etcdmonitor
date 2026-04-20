@@ -31,7 +31,46 @@ import (
 // Version 版本号，构建时通过 -ldflags 注入
 var Version = "dev"
 
+const helpText = `etcdmonitor - etcd Monitoring Dashboard
+
+Usage:
+  etcdmonitor [--config <path>]             启动监控服务（默认子命令）
+  etcdmonitor reset-password [flags]        重置指定用户的密码（交互式）
+  etcdmonitor unlock [flags]                解锁指定用户（清零失败计数与锁定期）
+  etcdmonitor -v                            打印版本并退出
+  etcdmonitor -h / --help                   显示此帮助
+
+Common flags:
+  --config <path>       配置文件路径（默认 config.yaml）
+  --username <name>     用户名（reset-password/unlock 默认 admin）
+`
+
 func main() {
+	// 子命令分发（自定义，以兼容既有 flag 用法）
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "reset-password":
+			if err := runResetPassword(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "unlock":
+			if err := runUnlock(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "-h", "--help", "help":
+			fmt.Print(helpText)
+			return
+		}
+	}
+
+	runServer()
+}
+
+func runServer() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	showVersion := flag.Bool("v", false, "Show version and exit")
 	flag.Parse()
@@ -82,18 +121,25 @@ func main() {
 	defer store.Close()
 	logger.Infof("Storage initialized: %s", cfg.Storage.DBPath)
 
+	// 初始化本地用户：首次启动 users 表为空时自动创建 admin 并写入初始密码文件
+	dataDir := filepath.Dir(cfg.Storage.DBPath)
+	if err := auth.EnsureDefaultAdmin(store, cfg.Auth.BcryptCost, dataDir); err != nil {
+		logger.Fatalf("Ensure default admin: %v", err)
+	}
+
 	// 初始化采集器（先于认证检测启动，确保立即采集数据）
 	coll := collector.New(cfg, store, healthMgr)
 	go coll.Start()
 	defer coll.Stop()
 
-	// 检测 etcd 认证状态（仅影响 Dashboard 访问控制）
-	dashboardAuthRequired := auth.DetectAuthRequired(cfg, healthMgr)
-	if dashboardAuthRequired {
-		logger.Infof("Dashboard auth mode: enabled (login required)")
+	// 检测 etcd 自身认证状态（仅用于 SDK 客户端是否需要携带凭据，不影响 Dashboard 登录）
+	etcdAuthEnabled := auth.DetectAuthRequired(cfg, healthMgr)
+	if etcdAuthEnabled {
+		logger.Infof("etcd cluster auth: enabled (SDK will use config credentials)")
 	} else {
-		logger.Infof("Dashboard auth mode: disabled (open access)")
+		logger.Infof("etcd cluster auth: disabled")
 	}
+	logger.Infof("Dashboard auth: local user DB (login required regardless of etcd auth)")
 
 	// 初始化会话存储
 	sessionStore := auth.NewMemorySessionStore()
@@ -116,12 +162,12 @@ func main() {
 	router.Use(api.GinZapLogger())
 	router.Use(api.SecurityHeadersMiddleware(cfg))
 
-	// 初始化 API 并注册路由
-	a := api.New(cfg, store, coll, healthMgr, dashboardAuthRequired, sessionStore, prefsStore, Version)
+	// 初始化 API 并注册路由（authRequired 参数保留但仅用于元信息展示）
+	a := api.New(cfg, store, coll, healthMgr, etcdAuthEnabled, sessionStore, prefsStore, Version)
 	protected := a.SetupRoutes(router)
 
 	// 初始化 KV 管理模块
-	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr, store, sessionStore, dashboardAuthRequired)
+	kvHandler, err := kvmanager.NewKVHandler(cfg, logger.L(), healthMgr, store, sessionStore, etcdAuthEnabled)
 	if err != nil {
 		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
 	} else {
@@ -132,7 +178,7 @@ func main() {
 
 	// 初始化 Ops 运维模块
 	if cfg.OpsEnabled() {
-		opsHandler := ops.New(cfg, store, coll, healthMgr, sessionStore, dashboardAuthRequired)
+		opsHandler := ops.New(cfg, store, coll, healthMgr, sessionStore, etcdAuthEnabled)
 		opsHandler.RegisterRoutes(protected)
 		logger.Info("Ops panel initialized")
 	} else {

@@ -78,6 +78,27 @@ cd etcdmonitor
 
 **Requirements:** Go 1.21+
 
+## Login & Accounts
+
+On **first startup**, etcdmonitor auto-creates a default `admin` account. The randomly-generated initial password is written to `data/initial-admin-password` (mode 0600). Check the startup log for the exact path, then:
+
+```bash
+cat /path/to/data/initial-admin-password
+```
+
+Open the Dashboard and log in with `admin` + that password. You will be **forced to change the password** on first login; after the change the initial-password file is automatically deleted.
+
+**Dashboard login is decoupled from etcd auth.** The `etcd.username` / `etcd.password` in `config.yaml` are only used by Collector / KV Manager / Ops SDK clients — they do NOT affect who can log in to the Dashboard.
+
+**CLI utilities** (run on the server shell):
+
+```bash
+./etcdmonitor reset-password --username admin   # reset password (forces change on next login)
+./etcdmonitor unlock --username admin            # clear lockout without changing password
+```
+
+**Security policy**: bcrypt (cost 10 default), 5 failed attempts → 15-min lockout (shared between login & change-password), `data/` is 0700, sensitive files 0600. Passwords are never logged in plain text.
+
 ## Configuration
 
 Edit `config.yaml`:
@@ -118,6 +139,12 @@ kv_manager:
 ops:
   ops_enable: true                          # Enable Ops panel (set false to hide Ops tab and block /api/ops/*)
   audit_retention_days: 7                   # Audit log retention period (days), auto-cleanup on expiry
+
+auth:
+  bcrypt_cost: 10                           # Password hash cost (8-14; out-of-range falls back to 10 with WARN)
+  lockout_threshold: 5                      # Lock account after N consecutive failures (shared by login & change-password)
+  lockout_duration_seconds: 900             # Lockout duration (seconds), default 15 minutes
+  min_password_length: 8                    # Minimum new-password length
 
 log:
   dir: "logs"
@@ -419,7 +446,8 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
-| `/api/auth/login` | POST | No | Login with etcd credentials |
+| `/api/auth/login` | POST | No | Local admin login. Response may contain `must_change_password=true` (then no session is issued) |
+| `/api/auth/change-password` | POST | No | Change password (zero-token: authorized by `username + old_password`) |
 | `/api/auth/logout` | POST | Yes | Logout and invalidate session |
 | `/api/auth/status` | GET | No | Check auth requirement and session status |
 | `/api/members` | GET | Yes | List all cluster members |

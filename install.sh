@@ -75,6 +75,16 @@ chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/logs"
 chown "$RUN_USER:$RUN_GROUP" "$CONFIG"
 chown "$RUN_USER:$RUN_GROUP" "$BINARY"
 
+# 收紧数据目录权限：包含密码哈希、会话数据、初始密码文件，禁止同组/其他用户读取
+chmod 0700 "$INSTALL_DIR/data"
+# 若已有 DB 文件，同步收紧到 0600
+if [ -f "$INSTALL_DIR/data/etcdmonitor.db" ]; then
+    chmod 0600 "$INSTALL_DIR/data/etcdmonitor.db"
+fi
+if [ -f "$INSTALL_DIR/data/initial-admin-password" ]; then
+    chmod 0600 "$INSTALL_DIR/data/initial-admin-password"
+fi
+
 # 证书目录权限（私钥仅运行用户可读）
 if [ -d "$INSTALL_DIR/certs" ]; then
     chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/certs"

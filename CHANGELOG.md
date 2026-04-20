@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.0] - 2026-04-20
+
+### Added
+
+- **本地用户认证体系**（`local-user-auth`）：Dashboard 登录从"跟随 etcd auth"改为独立的本地账号体系
+  - 首次启动自动生成随机 16 字符初始密码（`crypto/rand` + base62，排除视觉歧义字符 `0/O/o/1/l/I`），bcrypt 哈希写入新 `users` 表
+  - 初始密码明文写入 `data/initial-admin-password`（权限 `0600`），启动日志打印文件路径而非密码
+  - 首次登录后强制修改密码（`must_change_password=1`），修改成功后系统自动删除该文件
+  - 登录页在 `initial_setup_pending=true` 时显示小字提示"初始密码保存在 data/initial-admin-password 文件中"（不泄露任何具体密码字面量）
+- **修改密码接口**：`POST /api/auth/change-password`（零 token 设计，凭 `username + old_password` 授权），前端新增 `web/change-password.html` 改密页
+- **登录失败锁定**：同一账号连续 5 次失败（`login` 与 `change-password` **共享计数**）锁定 15 分钟，状态落盘到 `users` 表，进程重启保留
+- **CLI 子命令**：
+  - `etcdmonitor reset-password --username admin`：交互式重置密码，自动置 `must_change_password=1` + 清锁
+  - `etcdmonitor unlock --username admin`：仅清锁，不改密码
+- **审计日志覆盖认证事件**：`login` / `login_lockout` / `change_password` / `cli_reset_password` / `cli_unlock` / `initial_password_file_deleted` 全部入库
+- `users` 表保留 `role` 字段（默认 `admin`），为后续 RBAC 预留 schema
+- 新增 `auth:` 配置段（可选）：`bcrypt_cost` / `lockout_threshold` / `lockout_duration_seconds` / `min_password_length`
+- **空表兜底恢复**：管理员清空 `users` 表后重启，系统自动重新生成新 admin 与新初始密码文件
+
+### Changed
+
+- **BREAKING**：Dashboard 无条件要求本地登录，彻底移除"etcd auth 未启用 → 免登录直接访问"的旁路；`authMiddleware` 不再根据 etcd auth 状态放行任何受保护路由
+- **BREAKING**：`/api/auth/login` 改为校验本地 `users` 表（bcrypt），不再调用 `clientv3.Authenticate`
+- `config.yaml` 中 `etcd.username` / `etcd.password` 语义澄清：**仅供 Collector / KV Manager / Ops 等 SDK 客户端使用**，与 Dashboard 登录完全解耦
+- `GET /api/auth/status` 返回语义：`auth_required` 恒为 `true`；新增 `initial_setup_pending` 字段；不再返回 `must_change_password`（仅 login 响应携带）
+- `DetectAuthRequired()` 不再决定 Dashboard 访问控制，仅用于告知 SDK 客户端是否需要携带凭据
+
+### Security
+
+- 密码使用 **bcrypt**（默认 cost 10，可配置 8–14）；禁止在代码、日志、前端中出现明文默认密码
+- 数据目录权限强制收紧：`data/` 为 `0700`，`data/etcdmonitor.db` 与 `data/initial-admin-password` 为 `0600`（`install.sh` 与运行时双保险）
+- 锁定期内即使密码正确也直接拒绝，且不做 bcrypt 比对（避免 timing side-channel 泄露）
+- 启动日志、审计日志严禁输出明文密码；CLI 两次交互静默读取（`golang.org/x/term`）
+
 ## [0.7.0] - 2026-04-17
 
 ### Added

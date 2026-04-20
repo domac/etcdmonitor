@@ -1438,7 +1438,7 @@ function resetRefreshTimer() {
 }
 
 // === Auth State ===
-let authRequired = false;
+let authRequired = true; // 新语义：Dashboard 无条件要求本地登录
 
 // === Init ===
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1453,12 +1453,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         const authData = await authResp.json();
-        if (authData.auth_required && !authData.authenticated) {
+        // 未登录 → 跳登录页（本地登录强制，无 auth_required 分支）
+        if (!authData.authenticated) {
             hideLoading();
             window.location.href = '/login.html';
             return;
         }
-        authRequired = !!authData.auth_required;
+        authRequired = true;
 
         // 启用/隐藏 Ops Tab
         if (authData.ops_enabled) {
@@ -1473,10 +1474,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // 显示/隐藏登出按钮
+    // 登出按钮始终显示（本地登录模式）
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
-        logoutBtn.style.display = authRequired ? '' : 'none';
+        logoutBtn.style.display = '';
     }
 
     // 加载面板配置并渲染

@@ -32,7 +32,7 @@
 - **KV 树搜索** - 实时 key 过滤，保留层级关系，60 秒后台索引刷新
 - **运维面板** - 集群运维操作中心：碎片整理、快照备份、告警管理、Leader 迁移、HashKV 一致性校验、Compact 集群压缩、审计日志（支持排序、分页、CSV 导出）
 - **80+ 指标，25 个图表** - 覆盖 Raft、磁盘 I/O、MVCC、Lease、网络、gRPC、Go 运行时
-- **Dashboard 登录认证** - 自动检测 etcd 认证状态；启用时需使用 etcd 凭据登录
+- **Dashboard 登录认证** - 本地用户体系（bcrypt）+ 首次登录强制改密 + 失败锁定（详见下方"登录与账号"章节）
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
 - **深色 / 浅色主题** - 一键切换，偏好保存在浏览器中
 - **HTTPS 支持** - 可选 TLS，内置自签名证书，也可使用自有证书
@@ -78,6 +78,90 @@ cd etcdmonitor
 
 **构建要求：** Go 1.21+
 
+## 登录与账号
+
+### 首次登录
+
+首次启动 etcdmonitor 时会自动创建默认管理员账号并在启动日志中打印其密码文件位置：
+
+```
+[WARN][Auth] ===============================================================
+[WARN][Auth]  Default admin account created.
+[WARN][Auth]  Initial password saved to:
+[WARN][Auth]    /path/to/data/initial-admin-password
+[WARN][Auth]  Please login with username 'admin' and change the password
+[WARN][Auth]  immediately. The file will be deleted automatically after a
+[WARN][Auth]  successful first password change.
+[WARN][Auth] ===============================================================
+```
+
+**步骤：**
+
+1. 在服务器上读取初始密码：
+
+   ```bash
+   cat /path/to/data/initial-admin-password
+   ```
+
+2. 浏览器访问 Dashboard，登录页会提示"首次登录？初始密码在 data/initial-admin-password 文件中"。
+3. 使用 `admin` + 初始密码登录。系统会**强制跳转修改密码页**（此时不会下发 session）。
+4. 在修改密码页输入：旧密码（即初始密码）+ 新密码（≥ 8 位）+ 再次输入。
+5. 修改成功后：
+   - `initial-admin-password` 文件自动删除
+   - 登录页的"初始密码"提示不再显示
+   - 自动跳回登录页，使用新密码登录进入 Dashboard
+
+### 与 etcd 认证的关系
+
+- `config.yaml` 中的 `etcd.username` / `etcd.password` **仅供 Collector / KV Manager / Ops 模块**等 SDK 客户端使用（采集指标、访问 KV、执行运维操作）。
+- **Dashboard 登录不再跟随 etcd 是否启用 auth**。即使 etcd 本身未启用 auth，访问 Dashboard 也必须通过本地账号。
+
+### CLI 管理命令
+
+当忘记密码或账号被暴力锁定时，使用以下子命令：
+
+```bash
+# 重置指定用户的密码（两次交互式输入；自动置 must_change=1）
+./etcdmonitor reset-password --username admin --config config.yaml
+
+# 解锁账号（清零 failed_attempts 和 locked_until，不改密码）
+./etcdmonitor unlock --username admin --config config.yaml
+```
+
+兜底恢复：若上述 CLI 也不可用，可停服后执行：
+
+```bash
+sqlite3 data/etcdmonitor.db "DELETE FROM users;"
+```
+
+重启后系统会按首次启动流程重新生成 admin 账号与新的 `initial-admin-password` 文件。
+
+### 安全策略
+
+- 密码使用 **bcrypt** 存储（默认 cost=10，可在 `auth.bcrypt_cost` 配置，有效范围 8-14）
+- 连续 5 次密码错误（`login` 与 `change-password` 共享计数）触发账号锁定 15 分钟
+- 锁定期间即使正确密码也会被拒绝（避免 timing side-channel 泄露）
+- 新密码策略：长度 ≥ 8；不能与旧密码相同
+- `data/` 目录权限 `0700`，`data/etcdmonitor.db` 与 `data/initial-admin-password` 权限 `0600`（`install.sh` 自动设置）
+- 启动日志、审计日志均不会出现明文密码
+
+### 忘记密码流程图
+
+```
+  忘记密码
+     │
+     ▼
+  能 SSH 到服务器？
+     │
+     ├─ 是 ──▶ etcdmonitor reset-password --username admin
+     │                 ↓
+     │           交互式输入新密码 × 2
+     │                 ↓
+     │        新密码生效，must_change=1（下次登录强制再改）
+     │
+     └─ 否 ──▶ 联系能 SSH 的运维；或停服 DELETE users 表重启
+```
+
 ## 配置说明
 
 编辑 `config.yaml`：
@@ -119,6 +203,12 @@ ops:
   ops_enable: true                          # 启用运维面板（设为 false 隐藏 Ops Tab，/api/ops/* 返回 403）
   audit_retention_days: 7                   # 审计日志保留天数，超期自动清理
 
+auth:
+  bcrypt_cost: 10                           # 密码哈希成本（8-14，越界回退到 10 并打印 WARN）
+  lockout_threshold: 5                      # 连续登录失败锁定阈值（login 与 change-password 共享）
+  lockout_duration_seconds: 900             # 账号锁定时长（秒），默认 15 分钟
+  min_password_length: 8                    # 新密码最短长度
+
 log:
   dir: "logs"
   filename: "etcdmonitor.log"
@@ -155,6 +245,10 @@ log:
 | `kv_manager.max_value_size` | KV 操作最大 value 大小（字节） | `2097152`（2MB） |
 | `ops.ops_enable` | 启用运维面板；设为 `false` 时隐藏 Ops Tab，`/api/ops/*` 返回 403 | `true` |
 | `ops.audit_retention_days` | 审计日志保留天数，超期自动清理 | `7` |
+| `auth.bcrypt_cost` | 密码 bcrypt 成本（8-14，越界回退到 10） | `10` |
+| `auth.lockout_threshold` | 连续登录/改密失败锁定阈值（共享计数） | `5` |
+| `auth.lockout_duration_seconds` | 账号锁定时长（秒） | `900` |
+| `auth.min_password_length` | 新密码最短长度 | `8` |
 | `log.dir` | 日志文件目录 | `logs` |
 | `log.filename` | 日志文件名 | `etcdmonitor.log` |
 | `log.level` | 日志级别：debug, info, warn, error | `info` |
@@ -419,9 +513,10 @@ sudo ./uninstall.sh
 
 | 端点 | 方法 | 认证 | 说明 |
 |---|---|---|---|
-| `/api/auth/login` | POST | 否 | 使用 etcd 凭据登录 |
+| `/api/auth/login` | POST | 否 | 使用本地账号（admin + 密码）登录，返回 `must_change_password` 时前端跳改密页 |
+| `/api/auth/change-password` | POST | 否 | 修改密码（零 token 设计，凭 username + old_password 授权） |
 | `/api/auth/logout` | POST | 是 | 登出并注销会话 |
-| `/api/auth/status` | GET | 否 | 检查认证要求和会话状态 |
+| `/api/auth/status` | GET | 否 | 返回 auth_required（恒 true）/ authenticated / initial_setup_pending |
 | `/api/members` | GET | 是 | 列出所有集群成员 |
 | `/api/current?member_id=<id>` | GET | 是 | 获取指定成员的最新指标快照 |
 | `/api/range?member_id=<id>&metrics=m1,m2&range=1h` | GET | 是 | 获取指定指标的时序数据 |
@@ -468,7 +563,7 @@ sudo ./uninstall.sh
 | `/api/ops/compact/revision` | GET | 是 | 获取当前集群 Revision（供面板展示参考） |
 | `/api/ops/audit-logs` | GET | 是 | 查询审计日志（query: page, page_size, operation） |
 
-> **认证说明**：当 etcd 启用认证时，受保护端点需要有效会话（通过 `Authorization: Bearer <token>` 请求头）。未启用 etcd 认证时，所有端点开放访问。
+> **认证说明**：受保护端点必须携带有效 session（通过 `Authorization: Bearer <token>` 请求头或 `etcdmonitor_session` Cookie）。Dashboard 访问与 etcd 侧是否启用 auth 完全解耦。
 
 ## 环境要求
 

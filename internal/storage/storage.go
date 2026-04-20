@@ -29,8 +29,12 @@ type Storage struct {
 // New 创建并初始化存储
 func New(cfg *config.Config) (*Storage, error) {
 	dbDir := filepath.Dir(cfg.Storage.DBPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
+	if err := os.MkdirAll(dbDir, 0700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
+	}
+	// 运行时保证数据目录权限收紧（部署脚本也会做一遍，此处是双保险）
+	if err := os.Chmod(dbDir, 0700); err != nil {
+		logger.Warnf("[Storage] chmod data dir %s to 0700 failed: %v", dbDir, err)
 	}
 
 	db, err := sql.Open("sqlite", cfg.Storage.DBPath)
@@ -64,6 +68,11 @@ func New(cfg *config.Config) (*Storage, error) {
 	}
 
 	s.migrateSchema()
+
+	// 收紧数据库文件权限（SQLite 以默认 umask 创建，可能是 0644；本工具存放密码哈希，严格 0600）
+	if err := os.Chmod(cfg.Storage.DBPath, 0600); err != nil {
+		logger.Warnf("[Storage] chmod db file %s to 0600 failed: %v", cfg.Storage.DBPath, err)
+	}
 
 	if err := s.CheckEndpointChange(); err != nil {
 		return nil, fmt.Errorf("check endpoint: %w", err)
@@ -102,6 +111,19 @@ func (s *Storage) initTables() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_audit_ts ON ops_audit_log(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_audit_operation ON ops_audit_log(operation);
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'admin',
+			must_change_password INTEGER NOT NULL DEFAULT 0,
+			failed_attempts INTEGER NOT NULL DEFAULT 0,
+			locked_until INTEGER NOT NULL DEFAULT 0,
+			last_login_at INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	`)
 	return err
 }
@@ -147,6 +169,60 @@ func (s *Storage) migrateSchema() {
 				logger.Warnf("[Storage] Create index warning: %v", err)
 			}
 			logger.Info("[Storage] Migration complete")
+		}
+	}
+
+	// users 表字段兼容性迁移：对已存在但缺列的 users 表补齐（幂等）
+	s.migrateUsersTable()
+}
+
+// migrateUsersTable 对已存在的 users 表补齐所需列；如果表本身刚由 initTables 创建则全部列已在，ALTER 会 no-op
+func (s *Storage) migrateUsersTable() {
+	rows, err := s.db.Query("PRAGMA table_info(users)")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		have[name] = true
+	}
+	if len(have) == 0 {
+		// 表不存在（initTables 应已创建；防御性跳过）
+		return
+	}
+
+	// 按字段声明顺序补齐缺失列（SQLite ALTER TABLE ADD COLUMN 不支持带默认约束变更，
+	// 但以下 DEFAULT 都是常量，被支持）
+	type col struct {
+		name string
+		ddl  string
+	}
+	columns := []col{
+		{"role", "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'"},
+		{"must_change_password", "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"},
+		{"failed_attempts", "ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0"},
+		{"locked_until", "ALTER TABLE users ADD COLUMN locked_until INTEGER NOT NULL DEFAULT 0"},
+		{"last_login_at", "ALTER TABLE users ADD COLUMN last_login_at INTEGER NOT NULL DEFAULT 0"},
+		{"created_at", "ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0"},
+		{"updated_at", "ALTER TABLE users ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, c := range columns {
+		if !have[c.name] {
+			if _, err := s.db.Exec(c.ddl); err != nil {
+				logger.Warnf("[Storage] users table migration warning (%s): %v", c.name, err)
+			} else {
+				logger.Infof("[Storage] users table migrated: added column %s", c.name)
+			}
 		}
 	}
 }

@@ -50,9 +50,10 @@ func New(cfg *config.Config, store *storage.Storage, c *collector.Collector, hea
 func (a *API) SetupRoutes(router *gin.Engine) *gin.RouterGroup {
 	// 公开路由（不受认证中间件保护）
 	router.POST("/api/auth/login", a.authHandler.HandleLogin)
+	router.POST("/api/auth/change-password", a.authHandler.HandleChangePassword)
 	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
 
-	// 受保护路由组（认证模式下需要有效会话）
+	// 受保护路由组（Dashboard 无条件要求本地登录）
 	protected := router.Group("/api")
 	protected.Use(a.authMiddleware())
 	{
@@ -132,20 +133,14 @@ func GinRecovery() gin.HandlerFunc {
 }
 
 // authMiddleware 返回认证 Gin 中间件
-// authRequired=false 时直接放行；否则从 Cookie 或 Authorization header 获取 token
+// Dashboard 访问无条件要求有效 session；不再根据 etcd 是否启用 auth 放行
 func (a *API) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !a.authRequired {
-			c.Next()
-			return
-		}
-
 		token := auth.ExtractToken(c.Request)
 		if token == "" || !a.sessionStore.IsValid(token) {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 			return
 		}
-
 		c.Next()
 	}
 }
@@ -175,14 +170,9 @@ func (a *API) getUsername(c *gin.Context) string {
 // handleGetPanelConfig 处理面板配置的读取
 func (a *API) handleGetPanelConfig(c *gin.Context) {
 	username := a.getUsername(c)
-	if username == "" && a.authRequired {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
-		return
-	}
-
 	if username == "" {
-		// 免认证模式返回默认配置
-		c.JSON(http.StatusOK, prefs.DefaultConfig())
+		// 到达此处意味着 middleware 已验证 session，但 token → username 失败（极少见）
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 		return
 	}
 
@@ -197,13 +187,8 @@ func (a *API) handleGetPanelConfig(c *gin.Context) {
 // handlePutPanelConfig 处理面板配置的保存
 func (a *API) handlePutPanelConfig(c *gin.Context) {
 	username := a.getUsername(c)
-	if username == "" && a.authRequired {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
-		return
-	}
-
 	if username == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no user identity"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 		return
 	}
 

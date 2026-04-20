@@ -66,6 +66,19 @@ ops:
   # 审计日志保留天数，默认 7 天，超期自动清理
   audit_retention_days: 7
 
+auth:
+  # Dashboard 本地登录相关配置（与 etcd 的 auth 完全独立）
+  # 说明：etcd.username / etcd.password 仅供 Collector / KV Manager 等 SDK 客户端使用，
+  #       Dashboard 登录始终使用本次变更引入的本地 users 表。
+  # bcrypt 哈希成本参数，范围 8-14，默认 10；越界时回退到 10 并打印 WARN
+  bcrypt_cost: 10
+  # 连续登录失败锁定阈值，默认 5 次（login 与 change-password 共享同一计数器）
+  lockout_threshold: 5
+  # 账号锁定时长（秒），默认 900 秒（15 分钟）
+  lockout_duration_seconds: 900
+  # 修改/重置密码时的最小长度，默认 8
+  min_password_length: 8
+
 log:
   # 日志目录（相对于程序所在目录）
   dir: "logs"
