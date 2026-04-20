@@ -44,7 +44,7 @@
 - **Dashboard 登录认证** - 本地用户体系（bcrypt）+ 首次登录强制改密 + 失败锁定（详见下方"登录与账号"章节）
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
 - **深色 / 浅色主题** - 一键切换，偏好保存在浏览器中
-- **HTTPS 支持** - 可选 TLS，内置自签名证书，也可使用自有证书
+- **HTTPS 支持** - Dashboard 可选启用 TLS，通过 `tools/gen-certs.sh` 在目标机器本地生成自签证书，或使用自有证书
 - **etcd TLS/mTLS** - 支持通过客户端证书连接启用了 TLS 的 etcd 集群（CA + 客户端证书 + 私钥）
 - **自动降采样** - 智能查询聚合，即使 7 天数据量也能保持面板流畅
 - **一键部署** - `install.sh` 自动配置 systemd 服务，`uninstall.sh` 一键清理
@@ -59,17 +59,26 @@
 ```bash
 # 上传到服务器
 
-unzip etcdmonitor-v0.7.0-linux-amd64.zip
-cd etcdmonitor-v0.7.0-linux-amd64
+unzip etcdmonitor-v<VERSION>-linux-amd64.zip
+cd etcdmonitor-v<VERSION>-linux-amd64
+
+# （可选）为 Dashboard 本地生成 TLS 证书（启用 HTTPS 时需要）
+./tools/gen-certs.sh --host monitor.corp.local --ip <服务器IP>
 
 # 编辑配置
 vim config.yaml
 
 # 安装并启动
-sh install.sh
+#   默认: 以 root 运行（与 0.8.x 行为保持一致）
+sudo ./install.sh
+#   生产推荐: 使用专用非 root 用户
+#   sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
+#   sudo ./install.sh --run-user etcdmonitor
 ```
 
-在浏览器中打开 `http://<服务器IP>:9090`。
+在浏览器中打开 `http://<服务器IP>:9090`（启用 TLS 时为 `https://...`）。
+
+> 上线前请先走一遍 [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)。
 
 ### 从源码构建
 
@@ -340,32 +349,47 @@ log:
 
 ### Dashboard HTTPS
 
-安装包内置了自签名 TLS 证书（有效期 1 年）。启用 HTTPS：
+发布包**不再内置**自签名证书 —— 由运维在目标机器本地生成。项目自带了辅助脚本：
+
+```bash
+# 最简形式（SAN 为 localhost / 127.0.0.1 / 0.0.0.0，仅供本机访问）
+./tools/gen-certs.sh
+
+# 生产：把用户实际访问 Dashboard 的 hostname / IP 全部写进 SAN。
+# --host 与 --ip 都支持多次传入（详见 ./tools/gen-certs.sh --help）。
+./tools/gen-certs.sh \
+    --host monitor.corp.local \
+    --host etcd-dashboard.internal \
+    --ip 10.0.1.5 \
+    --ip 10.0.1.6 \
+    --days 730
+
+# 覆盖已有证书（会让现有会话失效）
+./tools/gen-certs.sh --force
+```
+
+脚本会在项目目录生成 `certs/server.key`（权限 `0600`）与 `certs/server.crt`（权限 `0644`）。然后在 `config.yaml` 启用 HTTPS：
 
 ```yaml
 # config.yaml
 server:
   tls_enable: true
+  tls_cert: "certs/server.crt"
+  tls_key:  "certs/server.key"
 ```
 
 重启服务后通过 `https://<服务器IP>:9090` 访问。
 
-**使用自有证书：**
+> `install.sh` 在 `tls_enable: true` 但证书文件缺失时会拒绝启动，并明确提示运行 `./tools/gen-certs.sh`。
 
-替换 `certs/` 目录下的文件：
+**使用 CA 签发证书：**
+
+替换 `certs/` 目录下的文件（或使用 symlink 链接到企业证书管理目录 —— `install.sh` 对 symlink 证书保持原权限，不会 `chmod` 链接目标）：
 
 ```bash
 cp /path/to/your/cert.crt certs/server.crt
 cp /path/to/your/cert.key certs/server.key
-systemctl restart etcdmonitor
-```
-
-**重新生成自签名证书**（仅用于开发）：
-
-```bash
-# 在源码仓库中
-./tools/gen-certs.sh          # 默认: 1 年
-./tools/gen-certs.sh 730      # 自定义: 2 年
+sudo systemctl restart etcdmonitor
 ```
 
 > 自签名证书会触发浏览器安全警告。点击"高级" > "继续前往"即可，生产环境建议使用受信任的 CA 证书。
@@ -502,7 +526,14 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-服务默认以 `root` 用户运行。如需更换运行用户，安装前修改 `install.sh` 顶部的 `RUN_USER` 变量即可。服务崩溃后自动重启。
+服务默认以 `root` 用户运行（与 0.8.x 保持一致，保证升级路径顺畅）。生产部署请改为使用专用非 root 用户 —— 通过 `install.sh` 的 `--run-user <name>` 标志切换：
+
+```bash
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+```
+
+以 root 运行时 `install.sh` 会打印一次 WARN（终端 + journal），引导运维切换到上述推荐配置。服务通过 `Restart=always` 在崩溃后自动重启。
 
 ## 端点变更检测
 
@@ -605,7 +636,7 @@ sudo ./uninstall.sh
 
 ## 从 0.8.x 升级
 
-本次发布包含 **破坏性的部署变更**（打包证书策略）。服务默认仍以 `root` 运行，以保证升级路径顺畅；生产部署强烈建议改为非 root 专用用户。每台目标机器上执行：
+本次发布包含 **破坏性的部署变更**（发布包不再内置 TLS 证书，必须由运维在目标机器本地生成）。服务默认仍以 `root` 运行，以保证升级路径顺畅；生产部署强烈建议改为非 root 专用用户。每台目标机器上执行：
 
 ```bash
 # 1. 本地重新生成 TLS 证书（旧示例证书已吊销）

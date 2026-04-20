@@ -44,7 +44,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
 - **Dark / Light theme** - Toggle with one click, preference saved in browser
-- **HTTPS support** - Optional TLS with bundled self-signed certificates, or bring your own
+- **HTTPS support** - Optional TLS for the Dashboard; generate a local self-signed cert with `tools/gen-certs.sh`, or bring your own
 - **etcd TLS/mTLS** - Connect to TLS-secured etcd clusters with client certificates (CA + cert + key)
 - **Auto downsampling** - Smart query aggregation keeps dashboard responsive even with 7 days of data
 - **One-click deploy** - `install.sh` sets up systemd service, `uninstall.sh` cleans up
@@ -59,17 +59,27 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 ```bash
 # Upload to server
 
-unzip etcdmonitor-v0.7.0-linux-amd64.zip
-cd etcdmonitor-v0.7.0-linux-amd64
+unzip etcdmonitor-v<VERSION>-linux-amd64.zip
+cd etcdmonitor-v<VERSION>-linux-amd64
+
+# (Optional) Generate a local TLS certificate for HTTPS access
+./tools/gen-certs.sh --host monitor.corp.local --ip <server-ip>
 
 # Edit config
 vim config.yaml
 
 # Install & start
-sh install.sh
+#   default: runs as root (matches 0.8.x behavior)
+sudo ./install.sh
+#   RECOMMENDED for production: dedicated non-root user
+#   sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
+#   sudo ./install.sh --run-user etcdmonitor
 ```
 
-Open `http://<server-ip>:9090` in your browser.
+Open `http://<server-ip>:9090` (or `https://...` if TLS enabled) in your browser.
+
+> Before exposing to production, walk through
+> [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md).
 
 ### Build from Source
 
@@ -273,32 +283,52 @@ log:
 
 ### Dashboard HTTPS
 
-The install package includes a self-signed TLS certificate (valid for 1 year). To enable HTTPS:
+The release package **does not** ship with bundled certificates — you generate
+a local self-signed key on each target machine. Run the included helper:
+
+```bash
+# Simplest form (SAN: localhost, 127.0.0.1, 0.0.0.0)
+./tools/gen-certs.sh
+
+# Production: include the hostnames / IPs users will access the dashboard through.
+# --host and --ip are BOTH repeatable (see ./tools/gen-certs.sh --help).
+./tools/gen-certs.sh \
+    --host monitor.corp.local \
+    --host etcd-dashboard.internal \
+    --ip 10.0.1.5 \
+    --ip 10.0.1.6 \
+    --days 730
+
+# Overwrite an existing cert (invalidates current sessions)
+./tools/gen-certs.sh --force
+```
+
+This writes `certs/server.key` (mode `0600`) and `certs/server.crt` (mode
+`0644`) in the project directory. Then enable HTTPS in `config.yaml`:
 
 ```yaml
 # config.yaml
 server:
   tls_enable: true
+  tls_cert: "certs/server.crt"
+  tls_key:  "certs/server.key"
 ```
 
 Restart the service and access via `https://<server-ip>:9090`.
 
-**Using your own certificate:**
+> `install.sh` refuses to start when `tls_enable: true` but the cert files are
+> missing — it prints a one-line pointer back to `./tools/gen-certs.sh`.
 
-Replace the files in the `certs/` directory:
+**Using a CA-signed certificate:**
+
+Replace the files in the `certs/` directory (or symlink them to a central
+cert management directory — `install.sh` respects symlinks and will not
+`chmod` their targets):
 
 ```bash
 cp /path/to/your/cert.crt certs/server.crt
 cp /path/to/your/cert.key certs/server.key
-systemctl restart etcdmonitor
-```
-
-**Regenerating self-signed certificate** (development only):
-
-```bash
-# In the source repository
-./tools/gen-certs.sh          # default: 1 year
-./tools/gen-certs.sh 730      # custom: 2 years
+sudo systemctl restart etcdmonitor
 ```
 
 > Self-signed certificates will trigger a browser warning. Click "Advanced" > "Proceed" to continue, or use a certificate from a trusted CA for production.
@@ -435,7 +465,18 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-The service runs as `root` by default. To run as a different user, edit the `RUN_USER` variable at the top of `install.sh` before installation. The service auto-restarts on crash.
+The service runs as `root` by default (matches 0.8.x for upgrade continuity).
+For production, use a dedicated non-root user — pass `--run-user <name>` to
+`install.sh`:
+
+```bash
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+```
+
+When the service is installed as root, `install.sh` emits a one-time WARN
+(terminal + journal) pointing to this configuration. The service auto-restarts
+on crash via `Restart=always`.
 
 ## Endpoint Change Detection
 
@@ -540,7 +581,8 @@ not in public issues.
 
 ## Upgrading from 0.8.x
 
-This release contains **breaking deployment changes** (bundled certificates).
+This release contains **breaking deployment changes** (release packages no
+longer bundle TLS certificates; operators must generate them locally).
 The service still runs as `root` by default to keep upgrades painless; a
 dedicated non-root user is strongly recommended for production. On each target
 machine:
