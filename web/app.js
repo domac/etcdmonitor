@@ -994,7 +994,26 @@ function updateMVCCCompaction(data) {
     const chart = charts['chartMVCCCompaction'];
     if (!chart) return;
     chart.setOption({
-        tooltip: TOOLTIP_(),
+        tooltip: {
+            ...TOOLTIP_(),
+            formatter: params => {
+                let html = formatTime(params[0].value[0] / 1000) + '<br/>';
+                params.forEach(p => {
+                    const v = p.value[1];
+                    let text;
+                    if (p.seriesName === 'Current Revision' || p.seriesName === 'Compact Revision') {
+                        // Revision 是单调递增的序号，直接显示原始整数，不加千分位
+                        text = String(Math.round(v));
+                    } else if (p.seriesName === 'Compaction Keys') {
+                        text = v.toFixed(4) + '/s';
+                    } else {
+                        text = formatDuration(v);
+                    }
+                    html += `${p.marker} ${p.seriesName}: ${text}<br/>`;
+                });
+                return html;
+            }
+        },
         legend: LEGEND_(),
         grid: GRID_LEGEND,
         xAxis: { type: 'time', ...AXIS_STYLE_() },
