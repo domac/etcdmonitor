@@ -4,13 +4,32 @@
 # Usage:
 #   ./tools/gen-certs.sh [--host <hostname>]... [--ip <address>]... [--days <N>] [--force]
 #
-# Examples:
-#   ./tools/gen-certs.sh
-#   ./tools/gen-certs.sh --host monitor.corp.local
-#   ./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
-#   ./tools/gen-certs.sh --force  # overwrite existing cert
+# Both --host and --ip are **repeatable** — pass the flag multiple times to add
+# multiple entries to the certificate's Subject Alternative Name (SAN). The
+# built-in defaults (localhost / 127.0.0.1 / 0.0.0.0) are always included and
+# do not need to be repeated.
 #
-# Defaults:
+# Examples:
+#   # Local-only (default SANs cover 127.0.0.1 and localhost)
+#   ./tools/gen-certs.sh
+#
+#   # One hostname for domain access
+#   ./tools/gen-certs.sh --host monitor.corp.local
+#
+#   # One hostname + one IP, longer validity
+#   ./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+#
+#   # Multiple hostnames and IPs (for reverse proxy, failover, DNS rollout)
+#   ./tools/gen-certs.sh \
+#       --host monitor.corp.local \
+#       --host etcd-dashboard.internal \
+#       --ip 10.0.1.5 \
+#       --ip 10.0.1.6
+#
+#   # Overwrite an existing cert (invalidates current sessions)
+#   ./tools/gen-certs.sh --force
+#
+# Defaults (always present in SAN, no need to re-specify):
 #   SAN  = DNS:localhost, IP:127.0.0.1, IP:0.0.0.0
 #   Days = 365
 #
@@ -65,7 +84,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h|--help)
-            sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
