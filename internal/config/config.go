@@ -62,6 +62,13 @@ type Config struct {
 		Enable             *bool `yaml:"ops_enable"`
 		AuditRetentionDays int   `yaml:"audit_retention_days"`
 	} `yaml:"ops"`
+
+	Auth struct {
+		BcryptCost             int `yaml:"bcrypt_cost"`
+		LockoutThreshold       int `yaml:"lockout_threshold"`
+		LockoutDurationSeconds int `yaml:"lockout_duration_seconds"`
+		MinPasswordLength      int `yaml:"min_password_length"`
+	} `yaml:"auth"`
 }
 
 // Load 从文件加载配置并填充默认值
@@ -155,6 +162,22 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Ops.AuditRetentionDays <= 0 {
 		cfg.Ops.AuditRetentionDays = 7
+	}
+
+	// Auth 默认值
+	// 注意：BcryptCost 的越界（<8 或 >14）回退与 WARN 日志由 auth.HashPassword 负责，
+	// 这里仅把未配置（0）的情况补成默认 10。
+	if cfg.Auth.BcryptCost == 0 {
+		cfg.Auth.BcryptCost = 10
+	}
+	if cfg.Auth.LockoutThreshold <= 0 {
+		cfg.Auth.LockoutThreshold = 5
+	}
+	if cfg.Auth.LockoutDurationSeconds <= 0 {
+		cfg.Auth.LockoutDurationSeconds = 900
+	}
+	if cfg.Auth.MinPasswordLength <= 0 {
+		cfg.Auth.MinPasswordLength = 8
 	}
 
 	return cfg, nil

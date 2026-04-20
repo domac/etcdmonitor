@@ -23,6 +23,15 @@
 
 ---
 
+> **安全声明**
+>
+> 部署到生产前请先阅读 **[SECURITY.md](./SECURITY.md)**，并逐项完成
+> **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**。
+> 禁止跨机器复用示例 TLS 证书，每台目标机器必须本地运行
+> `./tools/gen-certs.sh` 生成证书。
+
+---
+
 ## 功能特性
 
 - **零依赖** - 单个静态二进制文件（~31MB），内嵌 Web UI、SQLite 存储，一切自包含
@@ -32,10 +41,10 @@
 - **KV 树搜索** - 实时 key 过滤，保留层级关系，60 秒后台索引刷新
 - **运维面板** - 集群运维操作中心：碎片整理、快照备份、告警管理、Leader 迁移、HashKV 一致性校验、Compact 集群压缩、审计日志（支持排序、分页、CSV 导出）
 - **80+ 指标，25 个图表** - 覆盖 Raft、磁盘 I/O、MVCC、Lease、网络、gRPC、Go 运行时
-- **Dashboard 登录认证** - 自动检测 etcd 认证状态；启用时需使用 etcd 凭据登录
+- **Dashboard 登录认证** - 本地用户体系（bcrypt）+ 首次登录强制改密 + 失败锁定（详见下方"登录与账号"章节）
 - **面板配置** - 面板显示/隐藏、拖拽排序，按用户持久化保存
 - **深色 / 浅色主题** - 一键切换，偏好保存在浏览器中
-- **HTTPS 支持** - 可选 TLS，内置自签名证书，也可使用自有证书
+- **HTTPS 支持** - Dashboard 可选启用 TLS，通过 `tools/gen-certs.sh` 在目标机器本地生成自签证书，或使用自有证书
 - **etcd TLS/mTLS** - 支持通过客户端证书连接启用了 TLS 的 etcd 集群（CA + 客户端证书 + 私钥）
 - **自动降采样** - 智能查询聚合，即使 7 天数据量也能保持面板流畅
 - **一键部署** - `install.sh` 自动配置 systemd 服务，`uninstall.sh` 一键清理
@@ -50,17 +59,26 @@
 ```bash
 # 上传到服务器
 
-unzip etcdmonitor-v0.7.0-linux-amd64.zip
-cd etcdmonitor-v0.7.0-linux-amd64
+unzip etcdmonitor-v<VERSION>-linux-amd64.zip
+cd etcdmonitor-v<VERSION>-linux-amd64
+
+# （可选）为 Dashboard 本地生成 TLS 证书（启用 HTTPS 时需要）
+./tools/gen-certs.sh --host monitor.corp.local --ip <服务器IP>
 
 # 编辑配置
 vim config.yaml
 
 # 安装并启动
-sh install.sh
+#   默认: 以 root 运行（与 0.8.x 行为保持一致）
+sudo ./install.sh
+#   生产推荐: 使用专用非 root 用户
+#   sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
+#   sudo ./install.sh --run-user etcdmonitor
 ```
 
-在浏览器中打开 `http://<服务器IP>:9090`。
+在浏览器中打开 `http://<服务器IP>:9090`（启用 TLS 时为 `https://...`）。
+
+> 上线前请先走一遍 [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)。
 
 ### 从源码构建
 
@@ -77,6 +95,90 @@ cd etcdmonitor
 ```
 
 **构建要求：** Go 1.21+
+
+## 登录与账号
+
+### 首次登录
+
+首次启动 etcdmonitor 时会自动创建默认管理员账号并在启动日志中打印其密码文件位置：
+
+```
+[WARN][Auth] ===============================================================
+[WARN][Auth]  Default admin account created.
+[WARN][Auth]  Initial password saved to:
+[WARN][Auth]    /path/to/data/initial-admin-password
+[WARN][Auth]  Please login with username 'admin' and change the password
+[WARN][Auth]  immediately. The file will be deleted automatically after a
+[WARN][Auth]  successful first password change.
+[WARN][Auth] ===============================================================
+```
+
+**步骤：**
+
+1. 在服务器上读取初始密码：
+
+   ```bash
+   cat /path/to/data/initial-admin-password
+   ```
+
+2. 浏览器访问 Dashboard，登录页会提示"首次登录？初始密码在 data/initial-admin-password 文件中"。
+3. 使用 `admin` + 初始密码登录。系统会**强制跳转修改密码页**（此时不会下发 session）。
+4. 在修改密码页输入：旧密码（即初始密码）+ 新密码（≥ 8 位）+ 再次输入。
+5. 修改成功后：
+   - `initial-admin-password` 文件自动删除
+   - 登录页的"初始密码"提示不再显示
+   - 自动跳回登录页，使用新密码登录进入 Dashboard
+
+### 与 etcd 认证的关系
+
+- `config.yaml` 中的 `etcd.username` / `etcd.password` **仅供 Collector / KV Manager / Ops 模块**等 SDK 客户端使用（采集指标、访问 KV、执行运维操作）。
+- **Dashboard 登录不再跟随 etcd 是否启用 auth**。即使 etcd 本身未启用 auth，访问 Dashboard 也必须通过本地账号。
+
+### CLI 管理命令
+
+当忘记密码或账号被暴力锁定时，使用以下子命令：
+
+```bash
+# 重置指定用户的密码（两次交互式输入；自动置 must_change=1）
+./etcdmonitor reset-password --username admin --config config.yaml
+
+# 解锁账号（清零 failed_attempts 和 locked_until，不改密码）
+./etcdmonitor unlock --username admin --config config.yaml
+```
+
+兜底恢复：若上述 CLI 也不可用，可停服后执行：
+
+```bash
+sqlite3 data/etcdmonitor.db "DELETE FROM users;"
+```
+
+重启后系统会按首次启动流程重新生成 admin 账号与新的 `initial-admin-password` 文件。
+
+### 安全策略
+
+- 密码使用 **bcrypt** 存储（默认 cost=10，可在 `auth.bcrypt_cost` 配置，有效范围 8-14）
+- 连续 5 次密码错误（`login` 与 `change-password` 共享计数）触发账号锁定 15 分钟
+- 锁定期间即使正确密码也会被拒绝（避免 timing side-channel 泄露）
+- 新密码策略：长度 ≥ 8；不能与旧密码相同
+- `data/` 目录权限 `0700`，`data/etcdmonitor.db` 与 `data/initial-admin-password` 权限 `0600`（`install.sh` 自动设置）
+- 启动日志、审计日志均不会出现明文密码
+
+### 忘记密码流程图
+
+```
+  忘记密码
+     │
+     ▼
+  能 SSH 到服务器？
+     │
+     ├─ 是 ──▶ etcdmonitor reset-password --username admin
+     │                 ↓
+     │           交互式输入新密码 × 2
+     │                 ↓
+     │        新密码生效，must_change=1（下次登录强制再改）
+     │
+     └─ 否 ──▶ 联系能 SSH 的运维；或停服 DELETE users 表重启
+```
 
 ## 配置说明
 
@@ -119,6 +221,12 @@ ops:
   ops_enable: true                          # 启用运维面板（设为 false 隐藏 Ops Tab，/api/ops/* 返回 403）
   audit_retention_days: 7                   # 审计日志保留天数，超期自动清理
 
+auth:
+  bcrypt_cost: 10                           # 密码哈希成本（8-14，越界回退到 10 并打印 WARN）
+  lockout_threshold: 5                      # 连续登录失败锁定阈值（login 与 change-password 共享）
+  lockout_duration_seconds: 900             # 账号锁定时长（秒），默认 15 分钟
+  min_password_length: 8                    # 新密码最短长度
+
 log:
   dir: "logs"
   filename: "etcdmonitor.log"
@@ -155,6 +263,10 @@ log:
 | `kv_manager.max_value_size` | KV 操作最大 value 大小（字节） | `2097152`（2MB） |
 | `ops.ops_enable` | 启用运维面板；设为 `false` 时隐藏 Ops Tab，`/api/ops/*` 返回 403 | `true` |
 | `ops.audit_retention_days` | 审计日志保留天数，超期自动清理 | `7` |
+| `auth.bcrypt_cost` | 密码 bcrypt 成本（8-14，越界回退到 10） | `10` |
+| `auth.lockout_threshold` | 连续登录/改密失败锁定阈值（共享计数） | `5` |
+| `auth.lockout_duration_seconds` | 账号锁定时长（秒） | `900` |
+| `auth.min_password_length` | 新密码最短长度 | `8` |
 | `log.dir` | 日志文件目录 | `logs` |
 | `log.filename` | 日志文件名 | `etcdmonitor.log` |
 | `log.level` | 日志级别：debug, info, warn, error | `info` |
@@ -237,32 +349,47 @@ log:
 
 ### Dashboard HTTPS
 
-安装包内置了自签名 TLS 证书（有效期 1 年）。启用 HTTPS：
+发布包**不再内置**自签名证书 —— 由运维在目标机器本地生成。项目自带了辅助脚本：
+
+```bash
+# 最简形式（SAN 为 localhost / 127.0.0.1 / 0.0.0.0，仅供本机访问）
+./tools/gen-certs.sh
+
+# 生产：把用户实际访问 Dashboard 的 hostname / IP 全部写进 SAN。
+# --host 与 --ip 都支持多次传入（详见 ./tools/gen-certs.sh --help）。
+./tools/gen-certs.sh \
+    --host monitor.corp.local \
+    --host etcd-dashboard.internal \
+    --ip 10.0.1.5 \
+    --ip 10.0.1.6 \
+    --days 730
+
+# 覆盖已有证书（会让现有会话失效）
+./tools/gen-certs.sh --force
+```
+
+脚本会在项目目录生成 `certs/server.key`（权限 `0600`）与 `certs/server.crt`（权限 `0644`）。然后在 `config.yaml` 启用 HTTPS：
 
 ```yaml
 # config.yaml
 server:
   tls_enable: true
+  tls_cert: "certs/server.crt"
+  tls_key:  "certs/server.key"
 ```
 
 重启服务后通过 `https://<服务器IP>:9090` 访问。
 
-**使用自有证书：**
+> `install.sh` 在 `tls_enable: true` 但证书文件缺失时会拒绝启动，并明确提示运行 `./tools/gen-certs.sh`。
 
-替换 `certs/` 目录下的文件：
+**使用 CA 签发证书：**
+
+替换 `certs/` 目录下的文件（或使用 symlink 链接到企业证书管理目录 —— `install.sh` 对 symlink 证书保持原权限，不会 `chmod` 链接目标）：
 
 ```bash
 cp /path/to/your/cert.crt certs/server.crt
 cp /path/to/your/cert.key certs/server.key
-systemctl restart etcdmonitor
-```
-
-**重新生成自签名证书**（仅用于开发）：
-
-```bash
-# 在源码仓库中
-./tools/gen-certs.sh          # 默认: 1 年
-./tools/gen-certs.sh 730      # 自定义: 2 年
+sudo systemctl restart etcdmonitor
 ```
 
 > 自签名证书会触发浏览器安全警告。点击"高级" > "继续前往"即可，生产环境建议使用受信任的 CA 证书。
@@ -399,7 +526,14 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-服务默认以 `root` 用户运行。如需更换运行用户，安装前修改 `install.sh` 顶部的 `RUN_USER` 变量即可。服务崩溃后自动重启。
+服务默认以 `root` 用户运行（与 0.8.x 保持一致，保证升级路径顺畅）。生产部署请改为使用专用非 root 用户 —— 通过 `install.sh` 的 `--run-user <name>` 标志切换：
+
+```bash
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+```
+
+以 root 运行时 `install.sh` 会打印一次 WARN（终端 + journal），引导运维切换到上述推荐配置。服务通过 `Restart=always` 在崩溃后自动重启。
 
 ## 端点变更检测
 
@@ -419,9 +553,10 @@ sudo ./uninstall.sh
 
 | 端点 | 方法 | 认证 | 说明 |
 |---|---|---|---|
-| `/api/auth/login` | POST | 否 | 使用 etcd 凭据登录 |
+| `/api/auth/login` | POST | 否 | 使用本地账号（admin + 密码）登录，返回 `must_change_password` 时前端跳改密页 |
+| `/api/auth/change-password` | POST | 否 | 修改密码（零 token 设计，凭 username + old_password 授权） |
 | `/api/auth/logout` | POST | 是 | 登出并注销会话 |
-| `/api/auth/status` | GET | 否 | 检查认证要求和会话状态 |
+| `/api/auth/status` | GET | 否 | 返回 auth_required（恒 true）/ authenticated / initial_setup_pending |
 | `/api/members` | GET | 是 | 列出所有集群成员 |
 | `/api/current?member_id=<id>` | GET | 是 | 获取指定成员的最新指标快照 |
 | `/api/range?member_id=<id>&metrics=m1,m2&range=1h` | GET | 是 | 获取指定指标的时序数据 |
@@ -468,7 +603,7 @@ sudo ./uninstall.sh
 | `/api/ops/compact/revision` | GET | 是 | 获取当前集群 Revision（供面板展示参考） |
 | `/api/ops/audit-logs` | GET | 是 | 查询审计日志（query: page, page_size, operation） |
 
-> **认证说明**：当 etcd 启用认证时，受保护端点需要有效会话（通过 `Authorization: Bearer <token>` 请求头）。未启用 etcd 认证时，所有端点开放访问。
+> **认证说明**：受保护端点必须携带有效 session（通过 `Authorization: Bearer <token>` 请求头或 `etcdmonitor_session` Cookie）。Dashboard 访问与 etcd 侧是否启用 auth 完全解耦。
 
 ## 环境要求
 
@@ -481,13 +616,46 @@ sudo ./uninstall.sh
 
 ## 贡献
 
-欢迎提交 Pull Request！
+欢迎提交 Pull Request！完整开发指南请看 **[CONTRIBUTING.md](./CONTRIBUTING.md)**
+（开发环境、提交规范、vendor 依赖管理、测试要求）。
+
+**快速开始：**
 
 1. Fork 本仓库
 2. 创建功能分支（`git checkout -b feature/amazing-feature`）
-3. 提交更改（`git commit -m 'Add amazing feature'`）
-4. 推送到分支（`git push origin feature/amazing-feature`）
-5. 创建 Pull Request
+3. 安装预提交钩子（运行 `gofmt`、`go vet`、`gitleaks`）：
+   ```bash
+   ln -sf ../../tools/pre-commit.sh .git/hooks/pre-commit
+   chmod +x .git/hooks/pre-commit
+   ```
+4. 提交更改并在 `CHANGELOG.md` 的 `[Unreleased]` 段加条目
+5. 推送到分支（`git push origin feature/amazing-feature`）
+6. 使用项目 PR 模板创建 Pull Request
+
+**安全问题** 请按 **[SECURITY.md](./SECURITY.md)** 私下报告，不要在公开 Issue 中提交。
+
+## 从 0.8.x 升级
+
+本次发布包含 **破坏性的部署变更**（发布包不再内置 TLS 证书，必须由运维在目标机器本地生成）。服务默认仍以 `root` 运行，以保证升级路径顺畅；生产部署强烈建议改为非 root 专用用户。每台目标机器上执行：
+
+```bash
+# 1. 本地重新生成 TLS 证书（旧示例证书已吊销）
+cd /opt/etcdmonitor
+./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+
+# 2. 重装（写入加固过的 systemd unit）
+#    默认行为保持 root，与 0.8.x 一致：
+sudo ./install.sh
+
+# 2'. 生产推荐：切换到专用非 root 用户
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+
+# 3. 验证沙箱
+systemd-analyze security etcdmonitor
+```
+
+以 root 运行时 `install.sh` 会在终端与 `journalctl -u etcdmonitor` 各打印一次 WARN，引导运维切换到 `--run-user` 推荐配置。
 
 ## 许可证
 

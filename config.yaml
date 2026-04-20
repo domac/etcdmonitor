@@ -5,9 +5,13 @@ etcd:
   # 多地址: "http://a:2379,http://b:2379,http://c:2379"
   # 使用 HTTPS 时: "https://a:2379,https://b:2379"
   endpoint: "http://127.0.0.1:2379"
-  # 认证用户名（Collector 采集 etcd 指标使用）
+  # ⚠️ 以下 username / password 仅供 Collector / KV Manager / Ops 等 SDK
+  #     客户端访问 etcd 集群时使用，与 Dashboard 登录 **无关**。
+  #     Dashboard 登录由独立的本地用户体系（local-user-auth）承担，
+  #     详见 docs/SECURITY_CHECKLIST.md 与 SECURITY.md。
+  # 认证用户名（Collector 采集 etcd 指标使用；留空表示 etcd 未启用 auth）
   username: ""
-  # 认证密码（Collector 采集 etcd 指标使用） - ⚠️ CHANGE THIS BEFORE DEPLOYMENT
+  # 认证密码（Collector 采集 etcd 指标使用；留空表示 etcd 未启用 auth）
   password: ""
   # metrics 路径
   metrics_path: "/metrics"
@@ -65,6 +69,19 @@ ops:
   ops_enable: true
   # 审计日志保留天数，默认 7 天，超期自动清理
   audit_retention_days: 7
+
+auth:
+  # Dashboard 本地登录相关配置（与 etcd 的 auth 完全独立）
+  # 说明：etcd.username / etcd.password 仅供 Collector / KV Manager 等 SDK 客户端使用，
+  #       Dashboard 登录始终使用本次变更引入的本地 users 表。
+  # bcrypt 哈希成本参数，范围 8-14，默认 10；越界时回退到 10 并打印 WARN
+  bcrypt_cost: 10
+  # 连续登录失败锁定阈值，默认 5 次（login 与 change-password 共享同一计数器）
+  lockout_threshold: 5
+  # 账号锁定时长（秒），默认 900 秒（15 分钟）
+  lockout_duration_seconds: 900
+  # 修改/重置密码时的最小长度，默认 8
+  min_password_length: 8
 
 log:
   # 日志目录（相对于程序所在目录）

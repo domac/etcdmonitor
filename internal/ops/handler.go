@@ -108,10 +108,9 @@ func (h *OpsHandler) newEtcdClientWithEndpoints(endpoints []string) (*clientv3.C
 }
 
 // getUsername 从请求中提取当前用户名
+// 由于 Dashboard 已强制本地登录，middleware 会拦截无 session 请求，
+// 到达这里的请求理论上必定带有有效 session；解析失败兜底返回 "anonymous" 仅为防御性策略。
 func (h *OpsHandler) getUsername(c *gin.Context) string {
-	if !h.authRequired {
-		return "anonymous"
-	}
 	token := auth.ExtractToken(c.Request)
 	if token == "" {
 		return "anonymous"

@@ -23,6 +23,15 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 ---
 
+> **Security notice**
+>
+> Before deploying to production, read **[SECURITY.md](./SECURITY.md)** and
+> work through **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**.
+> Never reuse example TLS certificates across machines — generate a local
+> key on every deployment target with `./tools/gen-certs.sh`.
+
+---
+
 ## Features
 
 - **Zero dependencies** - Single static binary (~31MB), embeds web UI, SQLite storage, everything
@@ -35,7 +44,7 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 - **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
 - **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
 - **Dark / Light theme** - Toggle with one click, preference saved in browser
-- **HTTPS support** - Optional TLS with bundled self-signed certificates, or bring your own
+- **HTTPS support** - Optional TLS for the Dashboard; generate a local self-signed cert with `tools/gen-certs.sh`, or bring your own
 - **etcd TLS/mTLS** - Connect to TLS-secured etcd clusters with client certificates (CA + cert + key)
 - **Auto downsampling** - Smart query aggregation keeps dashboard responsive even with 7 days of data
 - **One-click deploy** - `install.sh` sets up systemd service, `uninstall.sh` cleans up
@@ -50,17 +59,27 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 ```bash
 # Upload to server
 
-unzip etcdmonitor-v0.7.0-linux-amd64.zip
-cd etcdmonitor-v0.7.0-linux-amd64
+unzip etcdmonitor-v<VERSION>-linux-amd64.zip
+cd etcdmonitor-v<VERSION>-linux-amd64
+
+# (Optional) Generate a local TLS certificate for HTTPS access
+./tools/gen-certs.sh --host monitor.corp.local --ip <server-ip>
 
 # Edit config
 vim config.yaml
 
 # Install & start
-sh install.sh
+#   default: runs as root (matches 0.8.x behavior)
+sudo ./install.sh
+#   RECOMMENDED for production: dedicated non-root user
+#   sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
+#   sudo ./install.sh --run-user etcdmonitor
 ```
 
-Open `http://<server-ip>:9090` in your browser.
+Open `http://<server-ip>:9090` (or `https://...` if TLS enabled) in your browser.
+
+> Before exposing to production, walk through
+> [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md).
 
 ### Build from Source
 
@@ -77,6 +96,27 @@ cd etcdmonitor
 ```
 
 **Requirements:** Go 1.21+
+
+## Login & Accounts
+
+On **first startup**, etcdmonitor auto-creates a default `admin` account. The randomly-generated initial password is written to `data/initial-admin-password` (mode 0600). Check the startup log for the exact path, then:
+
+```bash
+cat /path/to/data/initial-admin-password
+```
+
+Open the Dashboard and log in with `admin` + that password. You will be **forced to change the password** on first login; after the change the initial-password file is automatically deleted.
+
+**Dashboard login is decoupled from etcd auth.** The `etcd.username` / `etcd.password` in `config.yaml` are only used by Collector / KV Manager / Ops SDK clients — they do NOT affect who can log in to the Dashboard.
+
+**CLI utilities** (run on the server shell):
+
+```bash
+./etcdmonitor reset-password --username admin   # reset password (forces change on next login)
+./etcdmonitor unlock --username admin            # clear lockout without changing password
+```
+
+**Security policy**: bcrypt (cost 10 default), 5 failed attempts → 15-min lockout (shared between login & change-password), `data/` is 0700, sensitive files 0600. Passwords are never logged in plain text.
 
 ## Configuration
 
@@ -118,6 +158,12 @@ kv_manager:
 ops:
   ops_enable: true                          # Enable Ops panel (set false to hide Ops tab and block /api/ops/*)
   audit_retention_days: 7                   # Audit log retention period (days), auto-cleanup on expiry
+
+auth:
+  bcrypt_cost: 10                           # Password hash cost (8-14; out-of-range falls back to 10 with WARN)
+  lockout_threshold: 5                      # Lock account after N consecutive failures (shared by login & change-password)
+  lockout_duration_seconds: 900             # Lockout duration (seconds), default 15 minutes
+  min_password_length: 8                    # Minimum new-password length
 
 log:
   dir: "logs"
@@ -237,32 +283,52 @@ log:
 
 ### Dashboard HTTPS
 
-The install package includes a self-signed TLS certificate (valid for 1 year). To enable HTTPS:
+The release package **does not** ship with bundled certificates — you generate
+a local self-signed key on each target machine. Run the included helper:
+
+```bash
+# Simplest form (SAN: localhost, 127.0.0.1, 0.0.0.0)
+./tools/gen-certs.sh
+
+# Production: include the hostnames / IPs users will access the dashboard through.
+# --host and --ip are BOTH repeatable (see ./tools/gen-certs.sh --help).
+./tools/gen-certs.sh \
+    --host monitor.corp.local \
+    --host etcd-dashboard.internal \
+    --ip 10.0.1.5 \
+    --ip 10.0.1.6 \
+    --days 730
+
+# Overwrite an existing cert (invalidates current sessions)
+./tools/gen-certs.sh --force
+```
+
+This writes `certs/server.key` (mode `0600`) and `certs/server.crt` (mode
+`0644`) in the project directory. Then enable HTTPS in `config.yaml`:
 
 ```yaml
 # config.yaml
 server:
   tls_enable: true
+  tls_cert: "certs/server.crt"
+  tls_key:  "certs/server.key"
 ```
 
 Restart the service and access via `https://<server-ip>:9090`.
 
-**Using your own certificate:**
+> `install.sh` refuses to start when `tls_enable: true` but the cert files are
+> missing — it prints a one-line pointer back to `./tools/gen-certs.sh`.
 
-Replace the files in the `certs/` directory:
+**Using a CA-signed certificate:**
+
+Replace the files in the `certs/` directory (or symlink them to a central
+cert management directory — `install.sh` respects symlinks and will not
+`chmod` their targets):
 
 ```bash
 cp /path/to/your/cert.crt certs/server.crt
 cp /path/to/your/cert.key certs/server.key
-systemctl restart etcdmonitor
-```
-
-**Regenerating self-signed certificate** (development only):
-
-```bash
-# In the source repository
-./tools/gen-certs.sh          # default: 1 year
-./tools/gen-certs.sh 730      # custom: 2 years
+sudo systemctl restart etcdmonitor
 ```
 
 > Self-signed certificates will trigger a browser warning. Click "Advanced" > "Proceed" to continue, or use a certificate from a trusted CA for production.
@@ -399,7 +465,18 @@ journalctl -u etcdmonitor -f
 tail -f logs/etcdmonitor.log
 ```
 
-The service runs as `root` by default. To run as a different user, edit the `RUN_USER` variable at the top of `install.sh` before installation. The service auto-restarts on crash.
+The service runs as `root` by default (matches 0.8.x for upgrade continuity).
+For production, use a dedicated non-root user — pass `--run-user <name>` to
+`install.sh`:
+
+```bash
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+```
+
+When the service is installed as root, `install.sh` emits a one-time WARN
+(terminal + journal) pointing to this configuration. The service auto-restarts
+on crash via `Restart=always`.
 
 ## Endpoint Change Detection
 
@@ -419,7 +496,8 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
-| `/api/auth/login` | POST | No | Login with etcd credentials |
+| `/api/auth/login` | POST | No | Local admin login. Response may contain `must_change_password=true` (then no session is issued) |
+| `/api/auth/change-password` | POST | No | Change password (zero-token: authorized by `username + old_password`) |
 | `/api/auth/logout` | POST | Yes | Logout and invalidate session |
 | `/api/auth/status` | GET | No | Check auth requirement and session status |
 | `/api/members` | GET | Yes | List all cluster members |
@@ -481,13 +559,54 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see **[CONTRIBUTING.md](./CONTRIBUTING.md)**
+for the full guide (environment setup, commit conventions, vendor dependency
+management, and testing requirements).
+
+**Quick start:**
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Install the pre-commit hook (runs `gofmt`, `go vet`, `gitleaks`):
+   ```bash
+   ln -sf ../../tools/pre-commit.sh .git/hooks/pre-commit
+   chmod +x .git/hooks/pre-commit
+   ```
+4. Commit your changes, update `CHANGELOG.md` under `[Unreleased]`
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request using the provided template
+
+**Security issues**: report privately per **[SECURITY.md](./SECURITY.md)**,
+not in public issues.
+
+## Upgrading from 0.8.x
+
+This release contains **breaking deployment changes** (release packages no
+longer bundle TLS certificates; operators must generate them locally).
+The service still runs as `root` by default to keep upgrades painless; a
+dedicated non-root user is strongly recommended for production. On each target
+machine:
+
+```bash
+# 1. Regenerate local TLS certificate (old example cert is revoked)
+cd /opt/etcdmonitor
+./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+
+# 2. Re-install (writes a hardened systemd unit)
+#    Default behavior keeps root, identical to 0.8.x:
+sudo ./install.sh
+
+# 2'. RECOMMENDED for production: switch to a dedicated non-root user
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+
+# 3. Verify sandbox
+systemd-analyze security etcdmonitor
+```
+
+When `install.sh` runs the service as root it emits a WARN (to the terminal
+and `journalctl -u etcdmonitor`) pointing to the recommended `--run-user`
+setup.
 
 ## License
 

@@ -268,7 +268,7 @@ async function opsExecSnapshot() {
         status.innerHTML = '<div class="ops-result success">Snapshot downloaded: ' + fname + ' (' + (blob.size / 1024 / 1024).toFixed(2) + ' MB)</div>';
         opsToast('Snapshot downloaded', 'success');
     } catch (e) {
-        status.innerHTML = '<div class="ops-result error">Failed: ' + e.message + '</div>';
+        status.innerHTML = '<div class="ops-result error">Failed: ' + escapeHTML(e.message) + '</div>';
         opsToast('Snapshot failed', 'error');
     }
     btn.disabled = false;
@@ -304,7 +304,7 @@ async function opsRefreshAlarms() {
         html += '</tbody></table>';
         el.innerHTML = html;
     } catch (e) {
-        el.innerHTML = '<div class="ops-result error">Failed to load alarms: ' + e.message + '</div>';
+        el.innerHTML = '<div class="ops-result error">Failed to load alarms: ' + escapeHTML(e.message) + '</div>';
     }
 }
 
@@ -378,14 +378,14 @@ async function opsExecMoveLeader() {
         });
         var data = await resp.json();
         if (resp.ok) {
-            status.innerHTML = '<div class="ops-result success">Leader moved to ' + data.target_name + ' in ' + data.duration_ms + 'ms</div>';
+            status.innerHTML = '<div class="ops-result success">Leader moved to ' + escapeHTML(data.target_name) + ' in ' + escapeHTML(String(data.duration_ms)) + 'ms</div>';
             opsToast('Leader moved successfully', 'success');
         } else {
-            status.innerHTML = '<div class="ops-result error">Failed: ' + data.error + '</div>';
+            status.innerHTML = '<div class="ops-result error">Failed: ' + escapeHTML(data.error) + '</div>';
             opsToast('Move leader failed', 'error');
         }
     } catch (e) {
-        status.innerHTML = '<div class="ops-result error">Failed: ' + e.message + '</div>';
+        status.innerHTML = '<div class="ops-result error">Failed: ' + escapeHTML(e.message) + '</div>';
     }
 }
 
@@ -433,7 +433,7 @@ async function opsExecHashKV() {
         result.innerHTML = html;
         opsToast(data.consistent ? 'Data consistent' : 'Inconsistency detected!', data.consistent ? 'success' : 'error');
     } catch (e) {
-        result.innerHTML = '<div class="ops-result error">Failed: ' + e.message + '</div>';
+        result.innerHTML = '<div class="ops-result error">Failed: ' + escapeHTML(e.message) + '</div>';
     }
     btn.disabled = false;
     btn.textContent = 'Run Consistency Check';
@@ -542,11 +542,11 @@ async function opsExecCompact() {
             // Refresh the displayed revision
             opsRefreshCompactRevision();
         } else {
-            result.innerHTML = '<div class="ops-result error">\u2717 ' + (data.error || 'Compact failed') + '</div>';
+            result.innerHTML = '<div class="ops-result error">\u2717 ' + escapeHTML(data.error || 'Compact failed') + '</div>';
             opsToast('Compact failed', 'error');
         }
     } catch (e) {
-        result.innerHTML = '<div class="ops-result error">\u2717 ' + e.message + '</div>';
+        result.innerHTML = '<div class="ops-result error">\u2717 ' + escapeHTML(e.message) + '</div>';
         opsToast('Compact failed: ' + e.message, 'error');
     }
 
@@ -698,7 +698,7 @@ async function opsLoadAuditLogs() {
             '<button onclick="opsAuditPage++;opsLoadAuditLogs()"' + (opsAuditPage >= opsAuditTotalPages ? ' disabled' : '') + '>Next &raquo;</button></div>';
         el.insertAdjacentHTML('beforeend', pagHTML);
     } catch (e) {
-        el.innerHTML = '<div class="ops-result error">Failed to load audit logs: ' + e.message + '</div>';
+        el.innerHTML = '<div class="ops-result error">Failed to load audit logs: ' + escapeHTML(e.message) + '</div>';
     }
 }
 

@@ -1,0 +1,32 @@
+# gitleaks configuration for etcdmonitor
+# Extends the default ruleset and adds project-specific allowlist.
+# https://github.com/gitleaks/gitleaks
+
+title = "etcdmonitor gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known non-sensitive matches"
+
+# Paths that contain fixture / test data. These files are reviewed and known
+# not to contain real credentials.
+paths = [
+  '''internal/collector/testdata/.*''',
+  '''openspec/changes/.*''',
+  '''openspec/specs/.*''',
+  '''CHANGELOG\.md''',
+]
+
+# Specific string patterns used in unit tests or example configs.
+# When adding new entries here, add a comment explaining why it is safe.
+regexes = [
+  # Unit test fixture: password used only in config_test.go to exercise parsing.
+  '''password: "secret"''',
+  # Example placeholder in config.yaml / README: the literal empty string.
+  '''password:\s*""''',
+  # Documentation: literal strings "admin" / "123456" shown as BANNED examples
+  # in SECURITY / openspec to warn against hardcoded defaults (never used in code).
+  '''"(admin|admin123|123456|etcdmonitor)"\s*(//|#)''',
+]

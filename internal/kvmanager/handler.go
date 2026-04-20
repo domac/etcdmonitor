@@ -59,11 +59,8 @@ func (h *KVHandler) Close() {
 	}
 }
 
-// getUsername 从会话中获取用户名，如果未认证则返回 "anonymous"
+// getUsername 从会话中获取用户名；到达此处的请求已经过 middleware 认证
 func (h *KVHandler) getUsername(c *gin.Context) string {
-	if !h.authRequired {
-		return "anonymous"
-	}
 	token := auth.ExtractToken(c.Request)
 	if token == "" {
 		return "anonymous"
