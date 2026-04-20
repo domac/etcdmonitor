@@ -26,8 +26,13 @@ Thumbs.db
 dist/
 data/
 logs/
-#certs/*.key
-#certs/*.crt
+# TLS / secrets: hard rules, must never be relaxed.
+certs/*.key
+certs/*.crt
+certs/*.pem
+certs/*.p12
+certs/*.pfx
+!certs/.gitkeep
 /etcdmonitor
 *.db
 *.log

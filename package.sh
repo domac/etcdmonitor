@@ -62,26 +62,30 @@ cp "${PROJECT_DIR}/config.yaml"     "$STAGING_DIR/config.yaml"
 cp "${PROJECT_DIR}/install.sh"      "$STAGING_DIR/install.sh"
 cp "${PROJECT_DIR}/uninstall.sh"    "$STAGING_DIR/uninstall.sh"
 
-# 生成 TLS 证书打入安装包
-echo "[INFO] Generating TLS certificates..."
+# 打入证书生成脚本（运维需在目标机器本地执行）
+mkdir -p "$STAGING_DIR/tools"
+cp "${PROJECT_DIR}/tools/gen-certs.sh" "$STAGING_DIR/tools/gen-certs.sh"
+chmod +x "$STAGING_DIR/tools/gen-certs.sh"
+
+# 打入 certs/README.md 指引运维本地生成证书；不内置任何 .key / .crt。
 mkdir -p "$STAGING_DIR/certs"
-openssl req -x509 -newkey rsa:2048 \
-    -keyout "$STAGING_DIR/certs/server.key" \
-    -out "$STAGING_DIR/certs/server.crt" \
-    -days 365 -nodes \
-    -subj "/CN=etcdmonitor" \
-    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0.0.0.0" 2>/dev/null
-chmod 600 "$STAGING_DIR/certs/server.key"
+cp "${PROJECT_DIR}/certs/README.md"  "$STAGING_DIR/certs/README.md"
 
 chmod +x "$STAGING_DIR/etcdmonitor"
 chmod +x "$STAGING_DIR/install.sh"
-chmod +x "$STAGING_DIR/uninstall.sh"
 chmod +x "$STAGING_DIR/uninstall.sh"
 
 # Step 5: 打包为 zip
 echo "[INFO] Creating zip package..."
 cd "$DIST_DIR"
 zip -rq "$ZIPFILE" "$PACKAGE_NAME"/
+
+# Step 5.5: 防御性校验 —— zip 内禁止出现任何私钥 / 证书文件
+if unzip -l "$ZIPFILE" | grep -Eq '\.(key|crt|pem|p12|pfx)$'; then
+    echo "[ERROR] Package contains certificate / private-key files. Aborting."
+    unzip -l "$ZIPFILE" | grep -E '\.(key|crt|pem|p12|pfx)$'
+    exit 1
+fi
 
 # Step 6: 清理
 rm -rf "$STAGING_DIR"   # 清理临时组装目录

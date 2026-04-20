@@ -77,12 +77,35 @@ func (a *API) AuthRequired() bool {
 
 // SecurityHeadersMiddleware 返回安全头 Gin 中间件（全局挂载）
 func SecurityHeadersMiddleware(cfg *config.Config) gin.HandlerFunc {
+	// CSP 说明：
+	//   - script-src 'self' 'unsafe-inline'：当前 Dashboard 前端大量使用内联
+	//     <script> 块（主题预加载、ACE 初始化、登录/改密页业务逻辑）与 on*
+	//     事件处理属性（index.html 有 ~59 个），完全移除 'unsafe-inline' 会
+	//     整面崩溃。保留本项以换取稳定性；未来独立变更可做 nonce 化 + 事件
+	//     监听器化。详见 docs/SECURITY_CHECKLIST.md 的"已知限制"小节。
+	//     注意：已移除 'unsafe-eval'，已移除 cdn.jsdelivr.net，ACE worker
+	//     通过下方 worker-src 'self' blob: 单独允许，不再依赖 script-src。
+	//   - style-src 'self' 'unsafe-inline'：前端动态 style 属性与主题样式
+	//     块依赖该项，同上保留。
+	//   - worker-src 'self' blob:：ACE editor 通过 blob URL 创建 Web Worker
+	//     做语法校验，必须允许 blob:，否则 KV 面板语法错误提示会失效。
+	//   - frame-ancestors 'none'：禁止被 iframe 嵌套，配合 X-Frame-Options。
+	//   - base-uri 'self'、form-action 'self'：缩减攻击面。
+	const csp = "default-src 'self'; " +
+		"script-src 'self' 'unsafe-inline'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data:; " +
+		"connect-src 'self'; " +
+		"worker-src 'self' blob:; " +
+		"frame-ancestors 'none'; " +
+		"base-uri 'self'; " +
+		"form-action 'self'"
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		c.Header("Content-Security-Policy", csp)
 		if cfg.Server.TLSEnable {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

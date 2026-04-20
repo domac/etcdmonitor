@@ -5,9 +5,13 @@ etcd:
   # 多地址: "http://a:2379,http://b:2379,http://c:2379"
   # 使用 HTTPS 时: "https://a:2379,https://b:2379"
   endpoint: "http://127.0.0.1:2379"
-  # 认证用户名（Collector 采集 etcd 指标使用）
+  # ⚠️ 以下 username / password 仅供 Collector / KV Manager / Ops 等 SDK
+  #     客户端访问 etcd 集群时使用，与 Dashboard 登录 **无关**。
+  #     Dashboard 登录由独立的本地用户体系（local-user-auth）承担，
+  #     详见 docs/SECURITY_CHECKLIST.md 与 SECURITY.md。
+  # 认证用户名（Collector 采集 etcd 指标使用；留空表示 etcd 未启用 auth）
   username: ""
-  # 认证密码（Collector 采集 etcd 指标使用） - ⚠️ CHANGE THIS BEFORE DEPLOYMENT
+  # 认证密码（Collector 采集 etcd 指标使用；留空表示 etcd 未启用 auth）
   password: ""
   # metrics 路径
   metrics_path: "/metrics"

@@ -23,6 +23,15 @@ Single binary. Zero dependencies. No Prometheus. No Grafana.
 
 ---
 
+> **Security notice**
+>
+> Before deploying to production, read **[SECURITY.md](./SECURITY.md)** and
+> work through **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**.
+> Never reuse example TLS certificates across machines — generate a local
+> key on every deployment target with `./tools/gen-certs.sh`.
+
+---
+
 ## Features
 
 - **Zero dependencies** - Single static binary (~31MB), embeds web UI, SQLite storage, everything
@@ -509,13 +518,53 @@ Removes the systemd service. Optionally deletes data and logs (interactive promp
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see **[CONTRIBUTING.md](./CONTRIBUTING.md)**
+for the full guide (environment setup, commit conventions, vendor dependency
+management, and testing requirements).
+
+**Quick start:**
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Install the pre-commit hook (runs `gofmt`, `go vet`, `gitleaks`):
+   ```bash
+   ln -sf ../../tools/pre-commit.sh .git/hooks/pre-commit
+   chmod +x .git/hooks/pre-commit
+   ```
+4. Commit your changes, update `CHANGELOG.md` under `[Unreleased]`
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request using the provided template
+
+**Security issues**: report privately per **[SECURITY.md](./SECURITY.md)**,
+not in public issues.
+
+## Upgrading from 0.8.x
+
+This release contains **breaking deployment changes** (bundled certificates).
+The service still runs as `root` by default to keep upgrades painless; a
+dedicated non-root user is strongly recommended for production. On each target
+machine:
+
+```bash
+# 1. Regenerate local TLS certificate (old example cert is revoked)
+cd /opt/etcdmonitor
+./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+
+# 2. Re-install (writes a hardened systemd unit)
+#    Default behavior keeps root, identical to 0.8.x:
+sudo ./install.sh
+
+# 2'. RECOMMENDED for production: switch to a dedicated non-root user
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+
+# 3. Verify sandbox
+systemd-analyze security etcdmonitor
+```
+
+When `install.sh` runs the service as root it emits a WARN (to the terminal
+and `journalctl -u etcdmonitor`) pointing to the recommended `--run-user`
+setup.
 
 ## License
 

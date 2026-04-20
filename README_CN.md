@@ -23,6 +23,15 @@
 
 ---
 
+> **安全声明**
+>
+> 部署到生产前请先阅读 **[SECURITY.md](./SECURITY.md)**，并逐项完成
+> **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**。
+> 禁止跨机器复用示例 TLS 证书，每台目标机器必须本地运行
+> `./tools/gen-certs.sh` 生成证书。
+
+---
+
 ## 功能特性
 
 - **零依赖** - 单个静态二进制文件（~31MB），内嵌 Web UI、SQLite 存储，一切自包含
@@ -576,13 +585,46 @@ sudo ./uninstall.sh
 
 ## 贡献
 
-欢迎提交 Pull Request！
+欢迎提交 Pull Request！完整开发指南请看 **[CONTRIBUTING.md](./CONTRIBUTING.md)**
+（开发环境、提交规范、vendor 依赖管理、测试要求）。
+
+**快速开始：**
 
 1. Fork 本仓库
 2. 创建功能分支（`git checkout -b feature/amazing-feature`）
-3. 提交更改（`git commit -m 'Add amazing feature'`）
-4. 推送到分支（`git push origin feature/amazing-feature`）
-5. 创建 Pull Request
+3. 安装预提交钩子（运行 `gofmt`、`go vet`、`gitleaks`）：
+   ```bash
+   ln -sf ../../tools/pre-commit.sh .git/hooks/pre-commit
+   chmod +x .git/hooks/pre-commit
+   ```
+4. 提交更改并在 `CHANGELOG.md` 的 `[Unreleased]` 段加条目
+5. 推送到分支（`git push origin feature/amazing-feature`）
+6. 使用项目 PR 模板创建 Pull Request
+
+**安全问题** 请按 **[SECURITY.md](./SECURITY.md)** 私下报告，不要在公开 Issue 中提交。
+
+## 从 0.8.x 升级
+
+本次发布包含 **破坏性的部署变更**（打包证书策略）。服务默认仍以 `root` 运行，以保证升级路径顺畅；生产部署强烈建议改为非 root 专用用户。每台目标机器上执行：
+
+```bash
+# 1. 本地重新生成 TLS 证书（旧示例证书已吊销）
+cd /opt/etcdmonitor
+./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+
+# 2. 重装（写入加固过的 systemd unit）
+#    默认行为保持 root，与 0.8.x 一致：
+sudo ./install.sh
+
+# 2'. 生产推荐：切换到专用非 root 用户
+sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
+sudo ./install.sh --run-user etcdmonitor
+
+# 3. 验证沙箱
+systemd-analyze security etcdmonitor
+```
+
+以 root 运行时 `install.sh` 会在终端与 `journalctl -u etcdmonitor` 各打印一次 WARN，引导运维切换到 `--run-user` 推荐配置。
 
 ## 许可证
 
