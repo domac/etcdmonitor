@@ -67,7 +67,7 @@ var DefaultPanels = []PanelItem{
 	{ID: "chartServerHealth", Visible: false, Order: 19},
 	{ID: "chartSnapshotDefrag", Visible: false, Order: 20},
 	{ID: "chartBackendBreakdown", Visible: false, Order: 21},
-	{ID: "chartMVCCCompaction", Visible: false, Order: 22},
+	{ID: "chartMVCCCompaction", Visible: true, Order: 22},
 	{ID: "chartWatcherEvents", Visible: false, Order: 23},
 	{ID: "chartLeaseActivity", Visible: false, Order: 24},
 	{ID: "chartActivePeersGRPC", Visible: false, Order: 25},

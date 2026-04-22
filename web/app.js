@@ -38,7 +38,7 @@ const PANEL_REGISTRY = [
     { id: 'chartServerHealth',     name: 'Server Health & Quota',          section: 'raft',    order: 19 },
     { id: 'chartSnapshotDefrag',   name: 'Snapshot & Defrag Duration',     section: 'disk',    order: 20 },
     { id: 'chartBackendBreakdown', name: 'Backend Commit Breakdown',       section: 'disk',    order: 21 },
-    { id: 'chartMVCCCompaction',   name: 'MVCC Revisions & Compaction',    section: 'storage', order: 22 },
+    { id: 'chartMVCCCompaction',   name: 'MVCC Revisions & Compaction',    section: 'storage', order: 22, defaultVisible: true },
     { id: 'chartWatcherEvents',    name: 'Watcher & Events',               section: 'storage', order: 23 },
     { id: 'chartLeaseActivity',    name: 'Lease Activity',                 section: 'lease',   order: 24 },
     { id: 'chartActivePeersGRPC',  name: 'Active Peers & gRPC Messages',   section: 'network', order: 25 },
@@ -765,6 +765,31 @@ function updateBackendCommit(data) {
 function updateDBSize(data) {
     const chart = charts['chartDBSize'];
     if (!chart) return;
+
+    // 取 quota 最新值（若采集到），用于绘制 75%/90% 动态阈值线
+    const quotaSeries = data['etcd_server_quota_backend_bytes'] || [];
+    const quotaLatest = quotaSeries.length > 0 ? quotaSeries[quotaSeries.length - 1].value : null;
+    let markLineOpt;
+    if (quotaLatest && quotaLatest > 0) {
+        markLineOpt = {
+            silent: true,
+            symbol: ['none', 'none'],
+            lineStyle: { type: 'dashed', width: 1 },
+            data: [
+                {
+                    yAxis: quotaLatest * 0.75,
+                    lineStyle: { color: COLORS_().yellow },
+                    label: { formatter: 'warning 75% quota', color: COLORS_().yellow, position: 'insideEndTop' }
+                },
+                {
+                    yAxis: quotaLatest * 0.9,
+                    lineStyle: { color: COLORS_().red },
+                    label: { formatter: 'critical 90% quota', color: COLORS_().red, position: 'insideEndTop' }
+                }
+            ]
+        };
+    }
+
     chart.setOption({
         tooltip: {
             ...TOOLTIP_(),
@@ -773,6 +798,9 @@ function updateDBSize(data) {
                 params.forEach(p => {
                     html += `${p.marker} ${p.seriesName}: ${formatBytes(p.value[1])}<br/>`;
                 });
+                if (quotaLatest) {
+                    html += `<span style="color:var(--text-muted);font-size:10px">quota: ${formatBytes(quotaLatest)}</span>`;
+                }
                 return html;
             }
         },
@@ -784,7 +812,10 @@ function updateDBSize(data) {
             axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => formatBytes(v) }
         },
         series: [
-            makeSeries('Total Size', COLORS_().blue, data['etcd_mvcc_db_total_size_in_bytes'], { area: true }),
+            makeSeries('Total Size', COLORS_().blue, data['etcd_mvcc_db_total_size_in_bytes'], {
+                area: true,
+                extra: markLineOpt ? { markLine: markLineOpt } : undefined
+            }),
             makeSeries('In Use', COLORS_().cyan, data['etcd_mvcc_db_total_size_in_use_in_bytes'], { area: true })
         ]
     });
@@ -1249,7 +1280,31 @@ function updateMVCCCompaction(data) {
             makeSeries('Current Revision', COLORS_().blue, data['etcd_mvcc_current_revision'], { area: true }),
             makeSeries('Compact Revision', COLORS_().cyan, data['etcd_mvcc_compact_revision']),
             makeSeries('Compaction Keys', COLORS_().green, data['etcd_mvcc_db_compaction_keys_total_rate']),
-            { ...makeSeries('Compaction Pause P99', COLORS_().red, data['etcd_mvcc_db_compaction_pause_duration_p99']), yAxisIndex: 1 },
+            {
+                ...makeSeries('Compaction Pause P99', COLORS_().red, data['etcd_mvcc_db_compaction_pause_duration_p99'], {
+                    extra: {
+                        markLine: {
+                            silent: true,
+                            symbol: ['none', 'none'],
+                            lineStyle: { type: 'dashed', width: 1 },
+                            // 单位：seconds（与 Compaction Pause P99 series 同轴）
+                            data: [
+                                {
+                                    yAxis: 0.1,
+                                    lineStyle: { color: COLORS_().yellow },
+                                    label: { formatter: 'warning 100ms', color: COLORS_().yellow, position: 'insideEndTop' }
+                                },
+                                {
+                                    yAxis: 0.5,
+                                    lineStyle: { color: COLORS_().red },
+                                    label: { formatter: 'critical 500ms', color: COLORS_().red, position: 'insideEndTop' }
+                                }
+                            ]
+                        }
+                    }
+                }),
+                yAxisIndex: 1
+            },
             { ...makeSeries('Compaction Total P99', COLORS_().orange, data['etcd_mvcc_db_compaction_total_duration_p99']), yAxisIndex: 1 }
         ]
     });
