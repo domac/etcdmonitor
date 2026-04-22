@@ -2033,3 +2033,93 @@ body {
 [data-theme="light"] .ops-export-btn { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-btn-secondary { background: #fff; border-color: #e0e0e0; }
 [data-theme="light"] .ops-pagination button { background: #fff; border-color: #e0e0e0; }
+
+/* ============================================
+   KV Ace Editor Theme Alignment
+   ------------------------------------------------
+   将 ACE Editor (Monokai/Chrome) 的非 token 结构色
+   对齐到应用 CSS 变量，实现与 .kv-editor-panel 的
+   无缝融合；保留所有 token 颜色（keyword/string/
+   constant/comment/variable/support/storage/entity/
+   punctuation/invalid/indent-guide）由第三方主题提供。
+   ============================================ */
+
+/* --- Dark (Monokai) --- */
+.ace-monokai.ace_editor,
+.ace-monokai .ace_scroller {
+    background: var(--bg-secondary) !important;
+}
+.ace-monokai .ace_gutter {
+    background: var(--bg-card) !important;
+    color: var(--text-muted);
+}
+.ace-monokai .ace_marker-layer .ace_active-line {
+    background: rgba(88, 166, 255, 0.08);
+}
+.ace-monokai .ace_gutter-active-line {
+    background-color: rgba(88, 166, 255, 0.12);
+}
+.ace-monokai .ace_marker-layer .ace_selection {
+    background: rgba(88, 166, 255, 0.25);
+}
+.ace-monokai .ace_marker-layer .ace_selected-word {
+    border: 1px solid rgba(88, 166, 255, 0.35);
+}
+.ace-monokai .ace_marker-layer .ace_bracket {
+    margin: -1px 0 0 -1px;
+    border: 1px solid var(--border-color);
+}
+.ace-monokai .ace_fold {
+    background-color: var(--accent-blue);
+    border-color: var(--text-primary);
+}
+.ace-monokai.ace_multiselect .ace_selection.ace_start {
+    box-shadow: 0 0 3px 0px var(--bg-secondary);
+}
+.ace-monokai .ace_cursor {
+    color: var(--accent-blue);
+    border-left-color: var(--accent-blue);
+}
+.ace-monokai .ace_invisible {
+    color: var(--text-muted);
+}
+
+/* --- Light (Chrome) --- */
+.ace-chrome.ace_editor,
+.ace-chrome .ace_scroller {
+    background: var(--bg-secondary) !important;
+}
+.ace-chrome .ace_gutter {
+    background: var(--bg-card) !important;
+    color: var(--text-muted);
+}
+.ace-chrome .ace_marker-layer .ace_active-line {
+    background: rgba(9, 105, 218, 0.06);
+}
+.ace-chrome .ace_gutter-active-line {
+    background-color: rgba(9, 105, 218, 0.08);
+}
+.ace-chrome .ace_marker-layer .ace_selection {
+    background: rgba(9, 105, 218, 0.20);
+}
+.ace-chrome .ace_marker-layer .ace_selected-word {
+    border: 1px solid rgba(9, 105, 218, 0.35);
+}
+.ace-chrome .ace_marker-layer .ace_bracket {
+    margin: -1px 0 0 -1px;
+    border: 1px solid var(--border-color);
+}
+.ace-chrome .ace_fold {
+    background-color: var(--accent-blue);
+    border-color: var(--text-primary);
+}
+.ace-chrome.ace_multiselect .ace_selection.ace_start {
+    box-shadow: 0 0 3px 0px var(--bg-secondary);
+}
+.ace-chrome .ace_cursor {
+    color: var(--accent-blue);
+    border-left-color: var(--accent-blue);
+}
+.ace-chrome .ace_invisible {
+    color: var(--text-muted);
+}
