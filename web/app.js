@@ -75,6 +75,7 @@ const CARD_REGISTRY = [
     { id: 'cardPending',             name: 'Proposals Pending',   order: 7, defaultVisible: false },
     { id: 'cardLag',                 name: 'Commit-Apply Lag',    order: 8, defaultVisible: false },
     { id: 'cardFailedRate',          name: 'Proposal Failed Rate',order: 9, defaultVisible: false },
+    { id: 'cardRevision',            name: 'Current Revision',    order: 10, defaultVisible: false },
 ];
 
 // cardID → registry entry 快速查找
@@ -593,6 +594,15 @@ function updateCards(metrics) {
             fragEl.textContent = '-';
             fragEl.className = 'value';
         }
+    }
+
+    // Current Revision（etcd_mvcc_current_revision；无千分位，与 Raft Index 风格一致）
+    const currentRevision = metrics['etcd_mvcc_current_revision'];
+    const revEl = document.getElementById('cardRevision');
+    if (revEl) {
+        revEl.textContent = currentRevision !== undefined
+            ? Math.round(currentRevision).toString()
+            : '-';
     }
 }
 
