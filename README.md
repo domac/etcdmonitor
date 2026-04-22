@@ -6,82 +6,143 @@
 
 <div align="center">
 
-# etcd Monitor
+# etcdmonitor
 
-**Lightweight, self-contained monitoring dashboard for etcd clusters.**
+**Lightweight, self-contained monitoring dashboard for etcd clusters — single binary, zero dependencies.**
 
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+<!-- Release / Reference -->
+[![Release](https://img.shields.io/github/v/release/domac/etcdmonitor?display_name=tag&sort=semver)](https://github.com/domac/etcdmonitor/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/domac/etcdmonitor.svg)](https://pkg.go.dev/github.com/domac/etcdmonitor)
+[![Downloads](https://img.shields.io/github/downloads/domac/etcdmonitor/total)](https://github.com/domac/etcdmonitor/releases)
+
+<!-- Quality -->
+[![Go Report Card](https://goreportcard.com/badge/github.com/domac/etcdmonitor)](https://goreportcard.com/report/github.com/domac/etcdmonitor)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+<!-- Community -->
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Last Commit](https://img.shields.io/github/last-commit/domac/etcdmonitor)](https://github.com/domac/etcdmonitor/commits/master)
+
+<!-- Tags -->
+[![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![etcd](https://img.shields.io/badge/etcd-3.4.x-419EDA?logo=etcd&logoColor=white)](https://etcd.io)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20x86__64-lightgrey)](https://github.com)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20x86__64-lightgrey)](https://github.com/domac/etcdmonitor/releases)
 
-Single binary. Zero dependencies. No Prometheus. No Grafana.
+![etcdmonitor Dashboard](./dashboard.png)
 
-![etcd Monitor Dashboard](./dashboard.png)
+<!-- TODO: add assets/screenshots/kv-tree.png, ops.png, login.png, themes.png -->
 
 </div>
 
 ---
 
-> **Security notice**
->
-> Before deploying to production, read **[SECURITY.md](./SECURITY.md)** and
-> work through **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**.
-> Never reuse example TLS certificates across machines — generate a local
-> key on every deployment target with `./tools/gen-certs.sh`.
+> **Security notice** — Before deploying to production, read
+> **[SECURITY.md](./SECURITY.md)** and work through
+> **[docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md)**.
+> Never reuse example TLS certificates across machines — generate a
+> local key on every deployment target with `./tools/gen-certs.sh`.
 
 ---
 
+## Table of Contents
+
+- [Why etcdmonitor](#why-etcdmonitor)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Quick Start](#quick-start)
+- [Build from Source](#build-from-source)
+- [Configuration](#configuration)
+- [Documentation](#documentation)
+- [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [Community & Support](#community--support)
+- [Contributing](#contributing)
+- [Contributors](#contributors)
+- [Star History](#star-history)
+- [Acknowledgments](#acknowledgments)
+- [License](#license)
+
+## Why etcdmonitor
+
+etcdmonitor is **one binary** that gives you a production-grade
+Dashboard, a KV browser/editor, and a cluster-ops panel — without
+deploying Prometheus, Grafana, or an extra exporter.
+
+|  | **etcdmonitor** | Grafana + Prometheus + etcd-exporter | etcdkeeper |
+|---|---|---|---|
+| Deployment | Single binary | 3+ components | Single binary |
+| Metrics coverage | 80+ out of the box | 100+ (requires dashboards) | — |
+| KV management (v2 + v3) | ✅ | ❌ | ✅ |
+| Ops actions (Defrag / Snapshot / Compact / HashKV / Move Leader) | ✅ | Alerting only | ❌ |
+| Audit log | ✅ built-in | Requires extra setup | ❌ |
+| Local admin login | ✅ | Grafana built-in | ❌ |
+| Dark / Light theme | ✅ | ✅ | ❌ |
+| Best-fit scenario | Small/mid clusters, all-in-one ops | Large-scale multi-cluster aggregation | KV browsing only |
+
+**Use etcdmonitor when** you want a single binary to answer "is my etcd
+healthy, what's inside its KV space, and can I run maintenance on it?"
+without standing up a full observability stack.
+
+**Look elsewhere when** you already run Prometheus at scale and need
+centralized metrics across dozens of clusters — federate etcd-exporter
+into your existing Grafana instead.
+
 ## Features
 
-- **Zero dependencies** - Single static binary (~31MB), embeds web UI, SQLite storage, everything
-- **Multi-member cluster** - Auto-discovers all etcd members via official Go SDK, concurrent metrics collection
-- **Multi-endpoint failover** - Comma-separated endpoints with global health management, auto-recovery
-- **KV Tree management** - Browse, create, edit, delete keys with tree/list view, supports etcd v3 & v2
-- **KV Tree search** - Real-time key filtering with hierarchy preservation, 60s background index refresh
-- **Ops panel** - Cluster operations center: Defragment, Snapshot, Alarms, Move Leader, HashKV consistency check, Compact (cluster-wide revision compaction), Audit Log with sortable table, pagination, and CSV export
-- **80+ metrics, 25 charts** - Covers Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime
-- **Dashboard login** - Auto-detects etcd auth; when enabled, operators must log in with etcd credentials
-- **Panel configuration** - Show/hide and drag-to-reorder monitoring panels, per-user persistent settings
-- **Dark / Light theme** - Toggle with one click, preference saved in browser
-- **HTTPS support** - Optional TLS for the Dashboard; generate a local self-signed cert with `tools/gen-certs.sh`, or bring your own
-- **etcd TLS/mTLS** - Connect to TLS-secured etcd clusters with client certificates (CA + cert + key)
-- **Auto downsampling** - Smart query aggregation keeps dashboard responsive even with 7 days of data
-- **One-click deploy** - `install.sh` sets up systemd service, `uninstall.sh` cleans up
-- **Smart endpoint detection** - Supports `127.0.0.1` config, auto-resolves to real member ID
-- **Data isolation** - Per-member storage in SQLite, auto-cleanup on cluster endpoint change
-- **Data retention** - Configurable retention period (default 7 days), automatic expired data purge with disk reclaim
+- **Zero dependencies** — Single static binary (~31 MB) embeds web UI, SQLite storage, everything.
+- **Multi-member cluster** — Auto-discovers members via official Go SDK with concurrent collection.
+- **Multi-endpoint failover** — Comma-separated endpoints with global health management and auto-recovery.
+- **KV Tree management** — Browse, CRUD, and search keys in a tree/list view, supports etcd v3 & v2.
+- **Ops panel** — Defragment, Snapshot, Alarms, Move Leader, HashKV, Compact, Audit Log with CSV export.
+- **80+ metrics, 25 charts** — Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime.
+- **Local admin login** — Independent of etcd auth; bcrypt, lockout, forced first-time password change.
+- **Panel configuration** — Per-user show/hide & drag-to-reorder for monitoring panels.
+- **Dark / Light theme** — One-click toggle, preference saved in browser.
+- **HTTPS & etcd mTLS** — Optional TLS for Dashboard, mTLS client certs for etcd.
+- **Auto downsampling** — Smart query aggregation stays responsive with 7 days of data.
+- **One-click deploy** — `install.sh` writes a hardened systemd unit, `uninstall.sh` cleans up.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Dashboard](./dashboard.png) | <!-- TODO: add assets/screenshots/kv-tree.png --> KV Tree *(screenshot coming soon)* |
+| <!-- TODO: add assets/screenshots/ops.png --> Ops Panel *(screenshot coming soon)* | <!-- TODO: add assets/screenshots/login.png --> Login & Themes *(screenshot coming soon)* |
 
 ## Quick Start
 
-### Download & Deploy
-
 ```bash
-# Upload to server
-
+# Upload the release zip to your server
 unzip etcdmonitor-v<VERSION>-linux-amd64.zip
 cd etcdmonitor-v<VERSION>-linux-amd64
 
-# (Optional) Generate a local TLS certificate for HTTPS access
+# (Optional) Generate a local TLS certificate for HTTPS
 ./tools/gen-certs.sh --host monitor.corp.local --ip <server-ip>
 
 # Edit config
 vim config.yaml
 
-# Install & start
-#   default: runs as root (matches 0.8.x behavior)
+# Install & start (default: runs as root; see below for production)
 sudo ./install.sh
-#   RECOMMENDED for production: dedicated non-root user
-#   sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
-#   sudo ./install.sh --run-user etcdmonitor
+
+# RECOMMENDED for production: dedicated non-root user
+# sudo useradd -r -s /sbin/nologin -d "$(pwd)" etcdmonitor
+# sudo ./install.sh --run-user etcdmonitor
 ```
 
-Open `http://<server-ip>:9090` (or `https://...` if TLS enabled) in your browser.
+Open `http://<server-ip>:9090` (or `https://…` with TLS) in your browser.
 
-> Before exposing to production, walk through
-> [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md).
+On **first startup**, etcdmonitor auto-creates a default `admin` account.
+The randomly-generated initial password is written to
+`data/initial-admin-password` (mode 0600); the login page tells you which
+file to read. You are forced to change the password on first login, after
+which the file is deleted automatically.
 
-### Build from Source
+> Before exposing to production, walk through the
+> [Security checklist](./docs/SECURITY_CHECKLIST.md).
+
+## Build from Source
 
 ```bash
 git clone https://github.com/domac/etcdmonitor.git
@@ -90,138 +151,58 @@ cd etcdmonitor
 # Build binary only (for development/testing)
 ./build.sh
 
-# Create full deployment package (binary + config + certs + install scripts)
+# Create full deployment package (binary + config + install scripts)
 ./package.sh
 # Output: dist/etcdmonitor-v<version>-linux-amd64.zip
 ```
 
-**Requirements:** Go 1.21+
-
-## Login & Accounts
-
-On **first startup**, etcdmonitor auto-creates a default `admin` account. The randomly-generated initial password is written to `data/initial-admin-password` (mode 0600). Check the startup log for the exact path, then:
-
-```bash
-cat /path/to/data/initial-admin-password
-```
-
-Open the Dashboard and log in with `admin` + that password. You will be **forced to change the password** on first login; after the change the initial-password file is automatically deleted.
-
-**Dashboard login is decoupled from etcd auth.** The `etcd.username` / `etcd.password` in `config.yaml` are only used by Collector / KV Manager / Ops SDK clients — they do NOT affect who can log in to the Dashboard.
-
-**CLI utilities** (run on the server shell):
-
-```bash
-./etcdmonitor reset-password --username admin   # reset password (forces change on next login)
-./etcdmonitor unlock --username admin            # clear lockout without changing password
-```
-
-**Security policy**: bcrypt (cost 10 default), 5 failed attempts → 15-min lockout (shared between login & change-password), `data/` is 0700, sensitive files 0600. Passwords are never logged in plain text.
+**Requirements:** Go 1.21+.
 
 ## Configuration
 
-Edit `config.yaml`:
+Minimum `config.yaml` to get started:
 
 ```yaml
 etcd:
-  endpoint: "http://127.0.0.1:2379"         # Supports comma-separated multi-endpoints for failover
-  username: ""                              # Collector credentials (leave empty if no auth)
-  password: ""
-  metrics_path: "/metrics"
-  tls_enable: false                         # true: connect to etcd via TLS
-  tls_cert: "certs/client.crt"              # Client certificate (for mTLS)
-  tls_key: "certs/client.key"               # Client private key (for mTLS)
-  tls_ca_cert: "certs/ca.crt"              # CA certificate (to verify etcd server)
-  tls_insecure_skip_verify: false           # Skip server cert verification (testing only)
-  tls_server_name: ""                       # Server name for SNI verification
-
+  endpoint: "http://127.0.0.1:2379"   # comma-separated for multi-endpoint failover
 server:
   listen: ":9090"
-  tls_enable: false                         # true: HTTPS, false: HTTP
-  tls_cert: "certs/server.crt"
-  tls_key: "certs/server.key"
-  session_timeout: 3600                     # Dashboard session timeout (seconds)
-
 collector:
-  interval: 30          # seconds
-
+  interval: 30
 storage:
   db_path: "data/etcdmonitor.db"
   retention_days: 7
-
-kv_manager:
-  separator: "/"                            # Key path separator for tree view
-  connect_timeout: 5                        # etcd connection timeout (seconds)
-  request_timeout: 30                       # etcd request timeout (seconds)
-  max_value_size: 2097152                   # Max value size in bytes (default 2MB)
-
-ops:
-  ops_enable: true                          # Enable Ops panel (set false to hide Ops tab and block /api/ops/*)
-  audit_retention_days: 7                   # Audit log retention period (days), auto-cleanup on expiry
-
-auth:
-  bcrypt_cost: 10                           # Password hash cost (8-14; out-of-range falls back to 10 with WARN)
-  lockout_threshold: 5                      # Lock account after N consecutive failures (shared by login & change-password)
-  lockout_duration_seconds: 900             # Lockout duration (seconds), default 15 minutes
-  min_password_length: 8                    # Minimum new-password length
-
-log:
-  dir: "logs"
-  filename: "etcdmonitor.log"
-  level: "info"                             # debug, info, warn, error
-  max_size_mb: 50                           # Max single log file size (MB)
-  max_files: 5                              # Max number of log files to keep
-  max_age: 30                               # Max days to retain old logs (0 = no age limit)
-  compress: false                           # Compress rotated log files (gzip)
-  console: true                             # Also output to console
 ```
 
-| Parameter | Description | Default |
-|---|---|---|
-| `etcd.endpoint` | etcd client endpoint (comma-separated for multi-endpoint failover) | `http://127.0.0.1:2379` |
-| `etcd.username` | Collector auth username (leave empty if no auth) | - |
-| `etcd.password` | Collector auth password | - |
-| `etcd.tls_enable` | Enable TLS for etcd client connections | `false` |
-| `etcd.tls_cert` | Client certificate file path (for mTLS) | `certs/client.crt` |
-| `etcd.tls_key` | Client private key file path (for mTLS) | `certs/client.key` |
-| `etcd.tls_ca_cert` | CA certificate file path (to verify etcd server) | `certs/ca.crt` |
-| `etcd.tls_insecure_skip_verify` | Skip server certificate verification (testing only) | `false` |
-| `etcd.tls_server_name` | Server name for SNI verification | - |
-| `server.listen` | Dashboard listen address | `:9090` |
-| `server.tls_enable` | Enable HTTPS | `false` |
-| `server.tls_cert` | TLS certificate file path | `certs/server.crt` |
-| `server.tls_key` | TLS private key file path | `certs/server.key` |
-| `server.session_timeout` | Dashboard login session timeout (seconds), 0 = no expiry | `3600` |
-| `collector.interval` | Metrics collection interval (seconds) | `30` |
-| `storage.db_path` | SQLite database file path | `data/etcdmonitor.db` |
-| `storage.retention_days` | Data retention period (days) | `7` |
-| `kv_manager.separator` | Key path separator for KV tree view | `/` |
-| `kv_manager.connect_timeout` | etcd connection timeout for KV operations (seconds) | `5` |
-| `kv_manager.request_timeout` | etcd request timeout for KV operations (seconds) | `30` |
-| `kv_manager.max_value_size` | Max value size for KV operations (bytes) | `2097152` (2MB) |
-| `ops.ops_enable` | Enable Ops panel; when `false`, Ops tab is hidden and `/api/ops/*` returns 403 | `true` |
-| `ops.audit_retention_days` | Audit log retention period (days), expired entries auto-purged | `7` |
-| `log.dir` | Log file directory | `logs` |
-| `log.filename` | Log file name | `etcdmonitor.log` |
-| `log.level` | Log level: debug, info, warn, error | `info` |
-| `log.max_size_mb` | Max single log file size before rotation (MB) | `50` |
-| `log.max_files` | Max number of rotated log files to keep | `5` |
-| `log.max_age` | Max days to retain old log files (0 = no age limit) | `30` |
-| `log.compress` | Compress rotated log files with gzip | `false` |
-| `log.console` | Also output logs to console (stdout) | `true` |
+Full reference (every option, every default, every TLS field) →
+**[docs/CONFIGURATION.md](./docs/CONFIGURATION.md)**.
+
+## Documentation
+
+| Topic | Document |
+|---|---|
+| All configuration options | [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) |
+| HTTP API reference | [docs/API.md](./docs/API.md) |
+| HTTPS & etcd mTLS | [docs/TLS.md](./docs/TLS.md) |
+| Data retention & storage | [docs/DATA_RETENTION.md](./docs/DATA_RETENTION.md) |
+| Pre-production security checklist | [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md) |
+| Security policy & reporting | [SECURITY.md](./SECURITY.md) |
+| Contributing guide | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| Code of conduct | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) |
+| Change log | [CHANGELOG.md](./CHANGELOG.md) |
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   etcdmonitor (single binary)                  │
+│                  etcdmonitor (single binary)                   │
 │                                                                │
 │  ┌───────────┐   ┌──────────┐   ┌────────────────────────┐   │
 │  │ Collector  │──▶│  SQLite  │◀──│  HTTP/S API            │   │
 │  │ (30s poll) │   │ (per     │   │  /api/current          │   │
-│  │ concurrent │   │  member)  │   │  /api/range            │   │
+│  │ concurrent │   │  member) │   │  /api/range            │   │
 │  └─────┬──┬──┘   └──────────┘   │  /api/members          │   │
-│        │  │                      │  /api/status            │   │
+│        │  │                      │  /api/status           │   │
 │  ┌─────┴──┴──┐   ┌──────────┐   │  /api/auth/*           │   │
 │  │  Health   │   │ User     │◀──│  /api/user/*           │   │
 │  │  Manager  │   │ Prefs    │   │  /api/kv/v3/*          │   │
@@ -237,384 +218,60 @@ log:
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Dashboard Panels
-
-### Key Metrics Banner
-
-| Metric | Source | Description |
-|---|---|---|
-| CPU Usage | `process_cpu_seconds_total` (rate) | Real-time CPU usage percentage |
-| Memory | `process_resident_memory_bytes` | Resident memory (RSS) |
-| DB Size | `etcd_mvcc_db_total_size_in_bytes` | Database total / in-use size |
-| KV Total | `etcd_debugging_mvcc_keys_total` | Total key-value revisions |
-| Backend Commit P99 | `etcd_disk_backend_commit_duration_seconds` | boltdb commit latency |
-
-### Overview Cards
-
-Up to **7 cards** can be shown at once (grid is fixed to 7 columns to avoid wrapping). Use the gear icon ⚙ in the top-right to choose which cards to display and reorder them. Default visibility:
-
-| Card | Default | Alert Condition |
-|---|---|---|
-| Leader Status | ✅ shown | Red when no leader |
-| Leader Changes | ✅ shown | Watch for frequent changes |
-| Members | ✅ shown | Cluster size, hover for member details |
-| Raft Term | ✅ shown | Current raft term |
-| Raft Index | ✅ shown | Current commit index |
-| WAL Fsync P99 | ✅ shown | Red when > 10ms |
-| **Fragmentation Ratio** | ✅ shown | `1 - in_use/total`. Green < 30%, Yellow 30–40%, Orange 40–60%, Red > 60% (defrag recommended) |
-| Proposals Pending | ⬜ hidden by default | Red when > 5 |
-| Commit-Apply Lag | ⬜ hidden by default | Red when > 50 |
-| Proposal Failed Rate | ⬜ hidden by default | Red when > 0/s |
-
-If you try to enable more than 7 cards via the gear icon, the 8th checkbox will be disabled; saving is blocked at the frontend and backend (HTTP 400 `{"error":"too many visible cards","max":7}`) for safety.
-
-### Chart Panels (25 charts, 18 default + 7 extended)
-
-| Section | Charts | Key Metrics |
-|---|---|---|
-| **Raft & Server** | Proposals, Leader Changes, Commit-Apply Lag, Failed Rate | `proposals_*`, `leader_changes`, `slow_apply` |
-| **Raft & Server** *(ext)* | Server Health & Quota | `quota_backend_bytes`, `heartbeat_send_failures`, `health_*`, `client_requests` by API version |
-| **Disk Performance** | WAL Fsync Duration, Backend Commit Duration | P50/P90/P99 latency histograms |
-| **Disk Performance** *(ext)* | Snapshot & Defrag Duration, Backend Commit Breakdown | `defrag`/`snapshot`/`snap_db` latency, commit sub-phase `rebalance`/`spill`/`write` P50/P90/P99 |
-| **MVCC & Storage** | Database Size, MVCC Operations, **Fragmentation Ratio** | `db_total_size`, `put/delete/txn/range` totals, `1 - in_use/total` (higher = more fragmentation, defrag recommended) |
-| **MVCC & Storage** *(ext)* | MVCC Revisions & Compaction, Watcher & Events | `compact/current_revision`, `compaction_keys/duration`, `events_total`, `pending_events`, `watch_stream`, `slow_watcher` |
-| **Lease Management** *(ext)* | Lease Activity | `lease_granted/revoked/renewed/expired` totals |
-| **Network & Peers** | Peer Traffic, Peer RTT | `peer_sent/received_bytes`, RTT P50/P90/P99 |
-| **Network & Peers** *(ext)* | Active Peers & gRPC Messages | `network_active_peers`, `grpc_server_msg_sent/received` |
-| **gRPC Requests** | Request Rate, Client Traffic | `grpc_server_handled` (OK/Error), traffic bytes |
-| **Process & Runtime** | CPU Usage, Memory, Goroutines, GC Duration, File Descriptors, Memory Sys | CPU %, RSS, heap, GC pause, FDs, sys memory |
-
-> Panels marked *(ext)* are **hidden by default**. Enable them via the gear button (⚙) in the dashboard header.
-
-## HTTPS / TLS
-
-### Dashboard HTTPS
-
-The release package **does not** ship with bundled certificates — you generate
-a local self-signed key on each target machine. Run the included helper:
-
-```bash
-# Simplest form (SAN: localhost, 127.0.0.1, 0.0.0.0)
-./tools/gen-certs.sh
-
-# Production: include the hostnames / IPs users will access the dashboard through.
-# --host and --ip are BOTH repeatable (see ./tools/gen-certs.sh --help).
-./tools/gen-certs.sh \
-    --host monitor.corp.local \
-    --host etcd-dashboard.internal \
-    --ip 10.0.1.5 \
-    --ip 10.0.1.6 \
-    --days 730
-
-# Overwrite an existing cert (invalidates current sessions)
-./tools/gen-certs.sh --force
-```
-
-This writes `certs/server.key` (mode `0600`) and `certs/server.crt` (mode
-`0644`) in the project directory. Then enable HTTPS in `config.yaml`:
-
-```yaml
-# config.yaml
-server:
-  tls_enable: true
-  tls_cert: "certs/server.crt"
-  tls_key:  "certs/server.key"
-```
-
-Restart the service and access via `https://<server-ip>:9090`.
-
-> `install.sh` refuses to start when `tls_enable: true` but the cert files are
-> missing — it prints a one-line pointer back to `./tools/gen-certs.sh`.
-
-**Using a CA-signed certificate:**
-
-Replace the files in the `certs/` directory (or symlink them to a central
-cert management directory — `install.sh` respects symlinks and will not
-`chmod` their targets):
-
-```bash
-cp /path/to/your/cert.crt certs/server.crt
-cp /path/to/your/cert.key certs/server.key
-sudo systemctl restart etcdmonitor
-```
-
-> Self-signed certificates will trigger a browser warning. Click "Advanced" > "Proceed" to continue, or use a certificate from a trusted CA for production.
-
-### etcd Client TLS (mTLS)
-
-If your etcd cluster is deployed with TLS (`client-transport-security` with `client-cert-auth: true`), etcd Monitor supports connecting via client certificates.
-
-**Configuration:**
-
-```yaml
-etcd:
-  endpoint: "https://10.0.1.1:2379,https://10.0.1.2:2379,https://10.0.1.3:2379"
-  tls_enable: true
-  tls_cert: "certs/etcd-client.pem"         # Client certificate
-  tls_key: "certs/etcd-client-key.pem"      # Client private key
-  tls_ca_cert: "certs/ca.pem"               # CA certificate
-```
-
-**Setup steps:**
-
-```bash
-# Copy etcd client certificates to the etcdmonitor certs directory
-cp /etc/etcd/ssl/etcd-client.pem certs/etcd-client.pem
-cp /etc/etcd/ssl/etcd-client-key.pem certs/etcd-client-key.pem
-cp /etc/etcd/ssl/ca.pem certs/ca.pem
-
-# Edit config.yaml (set tls_enable: true and certificate paths)
-vim config.yaml
-
-# Restart the service
-systemctl restart etcdmonitor
-```
-
-**Supported scenarios:**
-
-| Scenario | `tls_enable` | `tls_cert` / `tls_key` | `tls_ca_cert` | `username` / `password` |
-|---|---|---|---|---|
-| Plain HTTP (no auth) | `false` | - | - | - |
-| Plain HTTP + password auth | `false` | - | - | ✅ |
-| HTTPS + CA only (server verification) | `true` | - | ✅ | Optional |
-| HTTPS + mTLS (client cert) | `true` | ✅ | ✅ | Optional |
-| HTTPS + mTLS + password auth | `true` | ✅ | ✅ | ✅ |
-
-> **Note:** When `tls_enable: true`, the endpoint must use `https://`. TLS is applied to all etcd connections: health probes, metrics collection, member discovery, KV management, and authentication.
-
-## Multi-Member Cluster Support
-
-etcd Monitor automatically discovers all cluster members via the official etcd v3 Go SDK (`clientv3.MemberList()`) and collects metrics concurrently.
-
-- No external binary dependencies (no `etcdctl` required)
-- Members are refreshed every 60 seconds (handles scaling events)
-- Each member's metrics are stored with its own `member_id` in SQLite
-- Dashboard header has a dropdown to switch between members
-- Local node is auto-detected even when config uses `127.0.0.1`
-
-## Multi-Endpoint Failover
-
-Configure multiple etcd endpoints for high availability:
-
-```yaml
-etcd:
-  endpoint: "http://10.0.1.1:2379,http://10.0.1.2:2379,http://10.0.1.3:2379"
-```
-
-- **Startup probe** - All endpoints are probed in parallel at startup; unhealthy ones are excluded
-- **Background health check** - Every 15 seconds, all endpoints are re-checked; recovered endpoints automatically rejoin
-- **Global healthy list** - Collector, KV Manager, and Auth modules all share the healthy endpoint list
-- **All-dead protection** - If all endpoints become unreachable, the process exits with a clear log message
-- Fully backward-compatible: single endpoint config works as before
-
-## KV Tree Management
-
-Built-in key-value browser and editor, accessible via the **KV Tree** tab in the dashboard header.
-
-- **Dual protocol** - Supports both etcd v3 (gRPC) and v2 (HTTP) APIs, toggle with one click
-- **Tree view** - Hierarchical tree with expand/collapse, dashed guide lines, SVG folder/file icons
-- **List view** - Flat key listing with full paths
-- **Root node** - The `/` root is always visible, right-click to create keys at the top level
-- **CRUD operations** - Create, read, update, delete keys via context menu and editor panel
-- **Key search & filter** - Real-time key filtering in tree panel; case-insensitive substring match; matched directories expand all children; hierarchy preserved; search state resets on protocol switch
-- **Keys-only loading** - Initial tree load and 60s background refresh use keys-only API (no value transfer), values loaded on-demand when clicking a node
-- **ACE Editor** - Syntax highlighting for JSON, YAML, TOML, XML, and more; dark/light theme sync
-- **TTL support** - Set time-to-live on keys; expired keys are automatically detected and removed from tree
-- **Per-request client** - Each KV operation creates a temporary etcd connection (etcdkeeper pattern), no long-lived connections
-- **Protocol state cache** - Switching between v3/v2 preserves each protocol's tree state
-
-## Theme
-
-Dashboard supports **Dark** and **Light** themes. Click the theme toggle button (☾ / ☀) in the top-right corner to switch. Your preference is saved in the browser's localStorage.
-
-## Data Retention & Storage
-
-### Retention Policy
-
-- Data older than `retention_days` (default: **7 days**) is automatically purged
-- Cleanup runs **every hour**
-- When > 10,000 rows are deleted, a full `VACUUM` reclaims disk space
-- Smaller deletions use `incremental_vacuum` for minimal overhead
-
-### Auto Downsampling
-
-Large time ranges are automatically downsampled to keep the dashboard responsive:
-
-| Time Range | Aggregation | Data Points per Metric | Method |
-|---|---|---|---|
-| ≤ 30 min | None | ~60 | Raw data |
-| ≤ 2 hours | 30 sec | ~240 | `AVG()` |
-| ≤ 12 hours | 2 min | ~360 | `AVG()` |
-| ≤ 48 hours | 5 min | ~576 | `AVG()` |
-| > 48 hours | 10 min | ~1,008 | `AVG()` |
-
-### Storage Estimates
-
-| Cluster Size | 7-Day Rows | DB File Size |
-|---|---|---|
-| 1 node | ~1M | ~50 MB |
-| 3 nodes | ~3M | ~150 MB |
-| 5 nodes | ~5M | ~250 MB |
-
-## Service Management
-
-```bash
-# Status
-systemctl status etcdmonitor
-
-# Start / Stop / Restart
-systemctl start etcdmonitor
-systemctl stop etcdmonitor
-systemctl restart etcdmonitor
-
-# Logs
-journalctl -u etcdmonitor -f
-tail -f logs/etcdmonitor.log
-```
-
-The service runs as `root` by default (matches 0.8.x for upgrade continuity).
-For production, use a dedicated non-root user — pass `--run-user <name>` to
-`install.sh`:
-
-```bash
-sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
-sudo ./install.sh --run-user etcdmonitor
-```
-
-When the service is installed as root, `install.sh` emits a one-time WARN
-(terminal + journal) pointing to this configuration. The service auto-restarts
-on crash via `Restart=always`.
-
-## Endpoint Change Detection
-
-When `etcd.endpoint` in `config.yaml` changes (pointing to a different cluster), all historical data is automatically purged on restart to prevent data mixing. Switching between members in the dashboard does **not** trigger data cleanup.
-
-## Uninstall
-
-```bash
-sudo ./uninstall.sh
-```
-
-Removes the systemd service. Optionally deletes data and logs (interactive prompt). Binary and config are preserved for re-installation.
-
-## API Reference
-
-### Dashboard APIs
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/auth/login` | POST | No | Local admin login. Response may contain `must_change_password=true` (then no session is issued) |
-| `/api/auth/change-password` | POST | No | Change password (zero-token: authorized by `username + old_password`) |
-| `/api/auth/logout` | POST | Yes | Logout and invalidate session |
-| `/api/auth/status` | GET | No | Check auth requirement and session status |
-| `/api/members` | GET | Yes | List all cluster members |
-| `/api/current?member_id=<id>` | GET | Yes | Latest metrics snapshot for a member |
-| `/api/range?member_id=<id>&metrics=m1,m2&range=1h` | GET | Yes | Time-series data for specified metrics |
-| `/api/status` | GET | Yes | Monitor system status & cluster info |
-| `/api/user/panel-config` | GET | Yes | Get user's panel visibility & order config |
-| `/api/user/panel-config` | PUT | Yes | Save user's panel visibility & order config |
-| `/api/debug` | GET | Yes | Debug info: DB member IDs, collector state |
-
-### KV Management APIs (v3)
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/kv/v3/connect` | POST | Yes | Connect and get cluster info (version, leader, DB size) |
-| `/api/kv/v3/separator` | GET | Yes | Get the key path separator |
-| `/api/kv/v3/keys` | GET | Yes | Get full key tree structure (keys only, no values) |
-| `/api/kv/v3/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
-| `/api/kv/v3/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
-| `/api/kv/v3/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl) |
-| `/api/kv/v3/delete` | POST | Yes | Delete a key or directory (JSON body: key, dir) |
-
-### KV Management APIs (v2)
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/kv/v2/connect` | POST | Yes | Connect and check v2 API availability |
-| `/api/kv/v2/separator` | GET | Yes | Get the key path separator |
-| `/api/kv/v2/keys` | GET | Yes | Get full key tree structure (keys only, no values) |
-| `/api/kv/v2/getpath?key=/` | GET | Yes | Get key tree under a path (recursive) |
-| `/api/kv/v2/get?key=/foo` | GET | Yes | Get a single key's value and metadata |
-| `/api/kv/v2/put` | PUT | Yes | Create or update a key (JSON body: key, value, ttl, dir) |
-| `/api/kv/v2/delete` | POST | Yes | Delete a key or directory (JSON body: key, dir) |
-
-### Ops APIs
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/ops/defragment` | POST | Yes | Defragment a member (JSON body: member_id) |
-| `/api/ops/snapshot` | GET | Yes | Download snapshot from a member (query: member_id) |
-| `/api/ops/alarms` | GET | Yes | List active cluster alarms |
-| `/api/ops/alarms/disarm` | POST | Yes | Disarm a specific alarm (JSON body: member_id, alarm_type) |
-| `/api/ops/move-leader` | POST | Yes | Move leader to target member (JSON body: target_member_id) |
-| `/api/ops/hashkv` | POST | Yes | Run HashKV consistency check across all members |
-| `/api/ops/compact` | POST | Yes | Cluster-wide revision compaction (JSON body: retain_count, physical) |
-| `/api/ops/compact/revision` | GET | Yes | Get current cluster Revision for reference |
-| `/api/ops/audit-logs` | GET | Yes | Query audit logs (query: page, page_size, operation) |
-
-> **Auth**: When etcd auth is enabled, protected endpoints require a valid session (via `Authorization: Bearer <token>` header). When etcd auth is not enabled, all endpoints are open.
-
-## Requirements
-
-| Component | Requirement |
-|---|---|
-| OS | Linux x86_64 (CentOS 7/8, RHEL, Ubuntu, etc.) |
-| etcd | 3.4.x (verified on 3.4.18) |
-| Runtime | **None** - statically linked binary, no Go/Node/Python/etcdctl needed |
-| Disk | ~250MB (10MB binary + ~200MB for 7 days of data) |
+## Roadmap
+
+- **Near term** — tracked in `[Unreleased]` of [CHANGELOG.md](./CHANGELOG.md).
+- **Longer term** — file ideas / vote via [GitHub Issues](https://github.com/domac/etcdmonitor/issues) with the `enhancement` label.
+- **Releases** — [GitHub Releases](https://github.com/domac/etcdmonitor/releases) with semver tags.
+
+## Community & Support
+
+- **Bug reports & feature requests** → [GitHub Issues](https://github.com/domac/etcdmonitor/issues)
+- **Questions & ideas** → [GitHub Discussions](https://github.com/domac/etcdmonitor/discussions)
+- **Security reports (privately)** → [SECURITY.md](./SECURITY.md) (do **not** file public issues)
+- **Contributing** → [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **Code of conduct** → [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ## Contributing
 
-Contributions are welcome! Please see **[CONTRIBUTING.md](./CONTRIBUTING.md)**
-for the full guide (environment setup, commit conventions, vendor dependency
-management, and testing requirements).
+Pull requests are welcome! The full guide (environment, commit
+conventions, vendor deps, testing) lives in
+**[CONTRIBUTING.md](./CONTRIBUTING.md)**. Quick path:
 
-**Quick start:**
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Install the pre-commit hook (runs `gofmt`, `go vet`, `gitleaks`):
+1. Fork the repo and create a feature branch: `git checkout -b feature/amazing`
+2. Install the pre-commit hook (runs `gofmt`, `go vet`, `gitleaks`):
    ```bash
    ln -sf ../../tools/pre-commit.sh .git/hooks/pre-commit
    chmod +x .git/hooks/pre-commit
    ```
-4. Commit your changes, update `CHANGELOG.md` under `[Unreleased]`
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request using the provided template
+3. Make your change, add tests where it makes sense, update `CHANGELOG.md` under `[Unreleased]`
+4. Commit and push; open a Pull Request using the provided template
 
-**Security issues**: report privately per **[SECURITY.md](./SECURITY.md)**,
-not in public issues.
+> **Security issues** must be reported privately per
+> [SECURITY.md](./SECURITY.md) — never in public issues.
 
-## Upgrading from 0.8.x
+## Contributors
 
-This release contains **breaking deployment changes** (release packages no
-longer bundle TLS certificates; operators must generate them locally).
-The service still runs as `root` by default to keep upgrades painless; a
-dedicated non-root user is strongly recommended for production. On each target
-machine:
+Thanks to everyone who has contributed to etcdmonitor!
 
-```bash
-# 1. Regenerate local TLS certificate (old example cert is revoked)
-cd /opt/etcdmonitor
-./tools/gen-certs.sh --host monitor.corp.local --ip 10.0.1.5 --days 730
+[![Contributors](https://contrib.rocks/image?repo=domac/etcdmonitor)](https://github.com/domac/etcdmonitor/graphs/contributors)
 
-# 2. Re-install (writes a hardened systemd unit)
-#    Default behavior keeps root, identical to 0.8.x:
-sudo ./install.sh
+## Star History
 
-# 2'. RECOMMENDED for production: switch to a dedicated non-root user
-sudo useradd -r -s /sbin/nologin -d /opt/etcdmonitor etcdmonitor
-sudo ./install.sh --run-user etcdmonitor
+[![Star History Chart](https://api.star-history.com/svg?repos=domac/etcdmonitor&type=Date)](https://star-history.com/#domac/etcdmonitor&Date)
 
-# 3. Verify sandbox
-systemd-analyze security etcdmonitor
-```
+## Acknowledgments
 
-When `install.sh` runs the service as root it emits a WARN (to the terminal
-and `journalctl -u etcdmonitor`) pointing to the recommended `--run-user`
-setup.
+etcdmonitor stands on the shoulders of great open-source projects:
+
+- **[etcd](https://etcd.io)** — the distributed key-value store this dashboard monitors
+- **[ACE Editor](https://ace.c9.io)** — in-browser code editor powering the KV value view
+- **[Apache ECharts](https://echarts.apache.org)** — the charting library behind every panel
+- **[go-sqlite3](https://github.com/mattn/go-sqlite3)** — zero-dependency SQLite binding for Go
+- **[Contributor Covenant](https://www.contributor-covenant.org)** — the Code of Conduct we adopt
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Released under the MIT License — see [LICENSE](LICENSE) for the full text.
+
+<!-- When updating this file, also sync README_CN.md: structure, badges, and screenshots must stay in lockstep. -->
