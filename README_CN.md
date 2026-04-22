@@ -31,8 +31,6 @@
 
 ![etcdmonitor Dashboard](./dashboard.png)
 
-<!-- TODO: 补拍 assets/screenshots/kv-tree.png、ops.png、login.png、themes.png -->
-
 </div>
 
 ---
@@ -48,7 +46,6 @@
 
 - [为什么选 etcdmonitor](#为什么选-etcdmonitor)
 - [功能亮点](#功能亮点)
-- [界面截图](#界面截图)
 - [快速开始](#快速开始)
 - [从源码构建](#从源码构建)
 - [配置](#配置)
@@ -93,13 +90,6 @@ etcdmonitor 是 **一个二进制**，就能提供生产可用的 Dashboard、KV
 - **HTTPS 与 etcd mTLS** —— Dashboard 可选 TLS，etcd 支持 mTLS 客户端证书。
 - **自动降采样** —— 智能聚合即使 7 天数据也秒级响应。
 - **一键部署** —— `install.sh` 写入硬化后的 systemd 单元，`uninstall.sh` 一键清理。
-
-## 界面截图
-
-| | |
-|---|---|
-| ![Dashboard](./dashboard.png) | <!-- TODO: 补 assets/screenshots/kv-tree.png --> KV 树 *(截图待补)* |
-| <!-- TODO: 补 assets/screenshots/ops.png --> 运维面板 *(截图待补)* | <!-- TODO: 补 assets/screenshots/login.png --> 登录与主题 *(截图待补)* |
 
 ## 快速开始
 

@@ -31,8 +31,6 @@
 
 ![etcdmonitor Dashboard](./dashboard.png)
 
-<!-- TODO: add assets/screenshots/kv-tree.png, ops.png, login.png, themes.png -->
-
 </div>
 
 ---
@@ -49,7 +47,6 @@
 
 - [Why etcdmonitor](#why-etcdmonitor)
 - [Features](#features)
-- [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
 - [Build from Source](#build-from-source)
 - [Configuration](#configuration)
@@ -100,13 +97,6 @@ into your existing Grafana instead.
 - **HTTPS & etcd mTLS** — Optional TLS for Dashboard, mTLS client certs for etcd.
 - **Auto downsampling** — Smart query aggregation stays responsive with 7 days of data.
 - **One-click deploy** — `install.sh` writes a hardened systemd unit, `uninstall.sh` cleans up.
-
-## Screenshots
-
-| | |
-|---|---|
-| ![Dashboard](./dashboard.png) | <!-- TODO: add assets/screenshots/kv-tree.png --> KV Tree *(screenshot coming soon)* |
-| <!-- TODO: add assets/screenshots/ops.png --> Ops Panel *(screenshot coming soon)* | <!-- TODO: add assets/screenshots/login.png --> Login & Themes *(screenshot coming soon)* |
 
 ## Quick Start
 
