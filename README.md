@@ -251,15 +251,22 @@ log:
 
 ### Overview Cards
 
-| Card | Alert Condition |
-|---|---|
-| Leader Status | Red when no leader |
-| Leader Changes | Watch for frequent changes |
-| Members | Cluster size, hover for member details |
-| WAL Fsync P99 | Red when > 10ms |
-| Proposals Pending | Red when > 5 |
-| Commit-Apply Lag | Red when > 50 |
-| Proposal Failed Rate | Red when > 0/s |
+Up to **7 cards** can be shown at once (grid is fixed to 7 columns to avoid wrapping). Use the gear icon ⚙ in the top-right to choose which cards to display and reorder them. Default visibility:
+
+| Card | Default | Alert Condition |
+|---|---|---|
+| Leader Status | ✅ shown | Red when no leader |
+| Leader Changes | ✅ shown | Watch for frequent changes |
+| Members | ✅ shown | Cluster size, hover for member details |
+| Raft Term | ✅ shown | Current raft term |
+| Raft Index | ✅ shown | Current commit index |
+| WAL Fsync P99 | ✅ shown | Red when > 10ms |
+| **Fragmentation Ratio** | ✅ shown | `1 - in_use/total`. Green < 30%, Yellow 30–40%, Orange 40–60%, Red > 60% (defrag recommended) |
+| Proposals Pending | ⬜ hidden by default | Red when > 5 |
+| Commit-Apply Lag | ⬜ hidden by default | Red when > 50 |
+| Proposal Failed Rate | ⬜ hidden by default | Red when > 0/s |
+
+If you try to enable more than 7 cards via the gear icon, the 8th checkbox will be disabled; saving is blocked at the frontend and backend (HTTP 400 `{"error":"too many visible cards","max":7}`) for safety.
 
 ### Chart Panels (25 charts, 18 default + 7 extended)
 
@@ -269,7 +276,7 @@ log:
 | **Raft & Server** *(ext)* | Server Health & Quota | `quota_backend_bytes`, `heartbeat_send_failures`, `health_*`, `client_requests` by API version |
 | **Disk Performance** | WAL Fsync Duration, Backend Commit Duration | P50/P90/P99 latency histograms |
 | **Disk Performance** *(ext)* | Snapshot & Defrag Duration, Backend Commit Breakdown | `defrag`/`snapshot`/`snap_db` latency, commit sub-phase `rebalance`/`spill`/`write` P50/P90/P99 |
-| **MVCC & Storage** | Database Size, MVCC Operations | `db_total_size`, `put/delete/txn/range` totals |
+| **MVCC & Storage** | Database Size, MVCC Operations, **Fragmentation Ratio** | `db_total_size`, `put/delete/txn/range` totals, `1 - in_use/total` (higher = more fragmentation, defrag recommended) |
 | **MVCC & Storage** *(ext)* | MVCC Revisions & Compaction, Watcher & Events | `compact/current_revision`, `compaction_keys/duration`, `events_total`, `pending_events`, `watch_stream`, `slow_watcher` |
 | **Lease Management** *(ext)* | Lease Activity | `lease_granted/revoked/renewed/expired` totals |
 | **Network & Peers** | Peer Traffic, Peer RTT | `peer_sent/received_bytes`, RTT P50/P90/P99 |

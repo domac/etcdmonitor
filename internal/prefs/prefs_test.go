@@ -1,6 +1,10 @@
 package prefs
 
 import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -156,11 +160,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("DefaultConfig() returned nil")
 	}
-	if cfg.Version != 1 {
-		t.Errorf("Version = %d, want 1", cfg.Version)
-	}
 	if len(cfg.Panels) != len(DefaultPanels) {
 		t.Errorf("len(Panels) = %d, want %d", len(cfg.Panels), len(DefaultPanels))
+	}
+	// Cards 字段保持为 nil（由前端 merge 补齐默认值）
+	if cfg.Cards != nil {
+		t.Errorf("Cards should be nil, got %+v", cfg.Cards)
 	}
 
 	// 确保是拷贝而非引用
@@ -177,7 +182,6 @@ func TestFileStore_SaveAndLoad(t *testing.T) {
 	store := NewFileStore(dir)
 
 	cfg := &PanelConfig{
-		Version: 1,
 		Panels: []PanelItem{
 			{ID: "chartRaftProposals", Visible: true, Order: 0},
 			{ID: "chartLeaderChanges", Visible: false, Order: 1},
@@ -219,5 +223,142 @@ func TestFileStore_LoadNonexistent(t *testing.T) {
 	// 应返回默认配置
 	if len(cfg.Panels) != len(DefaultPanels) {
 		t.Errorf("default panels = %d, want %d", len(cfg.Panels), len(DefaultPanels))
+	}
+}
+
+// ===== ValidatePanelConfig tests =====
+
+func makeCards(visibleCount int) []CardPref {
+	cards := make([]CardPref, 10)
+	for i := range cards {
+		cards[i] = CardPref{
+			ID:      "card" + string(rune('A'+i)),
+			Visible: i < visibleCount,
+			Order:   i,
+		}
+	}
+	return cards
+}
+
+func TestValidatePanelConfig_Nil(t *testing.T) {
+	if err := ValidatePanelConfig(nil); err != nil {
+		t.Errorf("ValidatePanelConfig(nil) = %v, want nil", err)
+	}
+}
+
+func TestValidatePanelConfig_NoCards(t *testing.T) {
+	// 空 / nil Cards 视为合法（由前端 merge 补齐）
+	cfg := &PanelConfig{Panels: DefaultPanels, Cards: nil}
+	if err := ValidatePanelConfig(cfg); err != nil {
+		t.Errorf("nil Cards should be valid, got %v", err)
+	}
+
+	cfg2 := &PanelConfig{Panels: DefaultPanels, Cards: []CardPref{}}
+	if err := ValidatePanelConfig(cfg2); err != nil {
+		t.Errorf("empty Cards should be valid, got %v", err)
+	}
+}
+
+func TestValidatePanelConfig_AtLimit(t *testing.T) {
+	cfg := &PanelConfig{Cards: makeCards(MaxVisibleCards)}
+	if err := ValidatePanelConfig(cfg); err != nil {
+		t.Errorf("Visible=MaxVisibleCards should be valid, got %v", err)
+	}
+}
+
+func TestValidatePanelConfig_OverLimit(t *testing.T) {
+	cfg := &PanelConfig{Cards: makeCards(MaxVisibleCards + 1)}
+	err := ValidatePanelConfig(cfg)
+	if err == nil {
+		t.Fatal("Visible=MaxVisibleCards+1 should return error")
+	}
+	if !errors.Is(err, ErrTooManyVisibleCards) {
+		t.Errorf("error should wrap ErrTooManyVisibleCards, got %v", err)
+	}
+}
+
+func TestValidatePanelConfig_UnderLimit(t *testing.T) {
+	cfg := &PanelConfig{Cards: makeCards(3)}
+	if err := ValidatePanelConfig(cfg); err != nil {
+		t.Errorf("Visible=3 should be valid, got %v", err)
+	}
+}
+
+// ===== Legacy file (no cards field) load tests =====
+
+func TestFileStore_LoadLegacyFile(t *testing.T) {
+	dir := t.TempDir()
+	// 写一个老版本 JSON：只有 panels 字段、没有 cards 字段、也没有 version
+	legacy := `{
+        "panels": [
+            {"id": "chartRaftProposals", "visible": true, "order": 0},
+            {"id": "chartLeaderChanges", "visible": false, "order": 1}
+        ]
+    }`
+	path := filepath.Join(dir, "legacy.json")
+	if err := os.WriteFile(path, []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewFileStore(dir)
+	cfg, err := store.Load("legacy")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	// panels 被 mergeWithDefaults 补齐为 DefaultPanels 全量
+	if len(cfg.Panels) != len(DefaultPanels) {
+		t.Errorf("panels=%d, want %d", len(cfg.Panels), len(DefaultPanels))
+	}
+	// cards 必须保持为 nil（由前端 merge 补齐默认值；服务端不主动迁移）
+	if cfg.Cards != nil {
+		t.Errorf("legacy file cards should remain nil, got %+v", cfg.Cards)
+	}
+	// 用户原有的 visible 设置保留
+	if cfg.Panels[0].ID != "chartRaftProposals" || !cfg.Panels[0].Visible {
+		t.Errorf("panel[0] = %+v", cfg.Panels[0])
+	}
+	if cfg.Panels[1].ID != "chartLeaderChanges" || cfg.Panels[1].Visible {
+		t.Errorf("panel[1] = %+v", cfg.Panels[1])
+	}
+}
+
+func TestFileStore_SaveAndLoadWithCards(t *testing.T) {
+	dir := t.TempDir()
+	store := NewFileStore(dir)
+
+	cfg := &PanelConfig{
+		Panels: []PanelItem{{ID: "chartRaftProposals", Visible: true, Order: 0}},
+		Cards: []CardPref{
+			{ID: "cardLeader", Visible: true, Order: 0},
+			{ID: "cardPending", Visible: false, Order: 1},
+		},
+	}
+	if err := store.Save("u", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// 原始文件应包含 cards 字段（omitempty 仅在空数组/nil 时省略）
+	raw, err := os.ReadFile(filepath.Join(dir, "u.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blob map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &blob); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := blob["cards"]; !ok {
+		t.Error("saved file should contain cards field")
+	}
+
+	loaded, err := store.Load("u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Cards) != 2 {
+		t.Fatalf("cards=%d, want 2", len(loaded.Cards))
+	}
+	if loaded.Cards[0].ID != "cardLeader" || !loaded.Cards[0].Visible {
+		t.Errorf("card[0] = %+v", loaded.Cards[0])
 	}
 }

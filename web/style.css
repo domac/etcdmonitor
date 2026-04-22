@@ -16,6 +16,7 @@
     --accent-green: #3fb950;
     --accent-red: #f85149;
     --accent-orange: #d29922;
+    --accent-yellow: #e3b341;
     --accent-purple: #bc8cff;
     --accent-cyan: #39d2c0;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -41,6 +42,7 @@
     --accent-green: #1a7f37;
     --accent-red: #cf222e;
     --accent-orange: #bc4c00;
+    --accent-yellow: #9a6700;
     --accent-purple: #8250df;
     --accent-cyan: #0e8a7e;
     --shadow: 0 1px 4px rgba(31, 35, 40, 0.1);
@@ -422,9 +424,12 @@ body {
 }
 
 /* === Overview Cards === */
+/* 固定 7 列栅格，由 JS (renderOverviewCards) 在运行时根据可见卡片数动态覆写
+   grid-template-columns 为 repeat(N, minmax(0, 1fr))，保证永不换行。
+   不设置 grid-auto-rows / overflow —— 让行高由卡片内容自然撑开。 */
 .overview-grid {
     display: grid;
-    grid-template-columns: repeat(9, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 12px;
     margin-bottom: 24px;
 }
@@ -449,9 +454,12 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 6px;
-    white-space: nowrap;
+    /* 长标签（如 "Fragmentation Ratio"）允许两行换行，
+       min-height 统一卡片高度，避免一行/两行卡片高低不齐。 */
+    white-space: normal;
+    line-height: 1.2em;
+    min-height: 2.4em;
     overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .stat-card .value {
@@ -468,6 +476,7 @@ body {
 .stat-card .value.red { color: var(--accent-red); }
 .stat-card .value.blue { color: var(--accent-blue); }
 .stat-card .value.orange { color: var(--accent-orange); }
+.stat-card .value.yellow { color: var(--accent-yellow); }
 .stat-card .value.cyan { color: var(--accent-cyan); }
 .stat-card .value.purple { color: var(--accent-purple); }
 
@@ -649,11 +658,9 @@ body {
 }
 
 /* === Responsive === */
-@media (max-width: 1400px) {
-    .overview-grid {
-        grid-template-columns: repeat(5, 1fr);
-    }
-}
+/* 注意：.overview-grid 的 grid-template-columns 由 JS (renderOverviewCards)
+   根据可见卡片数动态设置，这里的 @media 规则已不再适用于桌面宽度。
+   移动端 (max-width: 768px) 保留 2 列以便拇指阅读。 */
 
 @media (max-width: 1200px) {
     .panel-grid {
@@ -671,7 +678,7 @@ body {
         padding: 16px;
     }
     .overview-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
 
@@ -901,6 +908,34 @@ body {
     height: 16px;
     flex-shrink: 0;
     cursor: pointer;
+}
+
+/* 达到 7 张卡片上限后，未勾选的 checkbox 置灰禁用（前置禁用 A1 防线） */
+.config-panel-item input[type="checkbox"].checkbox-disabled,
+.config-panel-item input[type="checkbox"]:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+.config-panel-item.card-item-disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+/* 分组 header 右侧实时计数 */
+.config-section-label .card-count {
+    float: right;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
+}
+.config-section-label .card-count.at-limit {
+    color: var(--accent-orange);
+    font-weight: 600;
+}
+.config-section-label .card-count.over-limit {
+    color: var(--accent-red);
+    font-weight: 600;
 }
 
 .config-panel-name {

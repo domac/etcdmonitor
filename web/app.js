@@ -42,6 +42,7 @@ const PANEL_REGISTRY = [
     { id: 'chartWatcherEvents',    name: 'Watcher & Events',               section: 'storage', order: 23 },
     { id: 'chartLeaseActivity',    name: 'Lease Activity',                 section: 'lease',   order: 24 },
     { id: 'chartActivePeersGRPC',  name: 'Active Peers & gRPC Messages',   section: 'network', order: 25 },
+    { id: 'chartFragmentationRatio', name: 'Fragmentation Ratio',           section: 'storage', order: 26, defaultVisible: true },
 ];
 
 const SECTION_META = {
@@ -58,11 +59,41 @@ const SECTION_META = {
 const PANEL_MAP = {};
 PANEL_REGISTRY.forEach(p => { PANEL_MAP[p.id] = p; });
 
-// 默认面板配置（前 18 个可见，扩展面板默认隐藏）
+// === Card Registry ===
+// Overview Cards 的元数据：ID、显示名称、默认顺序、默认可见性
+// 注意：defaultVisible 为 true 的卡片恰好 7 张（= 上限），与运维习惯对齐；
+// Proposals Pending / Commit-Apply Lag / Proposal Failed Rate 默认隐藏，
+// 用户可通过齿轮图标在配置窗口中勾选启用。
+const CARD_REGISTRY = [
+    { id: 'cardLeader',              name: 'Leader Status',       order: 0, defaultVisible: true  },
+    { id: 'cardLeaderChanges',       name: 'Leader Changes',      order: 1, defaultVisible: true  },
+    { id: 'cardMemberSize',          name: 'Members',             order: 2, defaultVisible: true  },
+    { id: 'cardRaftTerm',            name: 'Raft Term',           order: 3, defaultVisible: true  },
+    { id: 'cardRaftIndex',           name: 'Raft Index',          order: 4, defaultVisible: true  },
+    { id: 'cardWAL',                 name: 'WAL Fsync P99',       order: 5, defaultVisible: true  },
+    { id: 'cardFragmentationRatio',  name: 'Fragmentation Ratio', order: 6, defaultVisible: true  },
+    { id: 'cardPending',             name: 'Proposals Pending',   order: 7, defaultVisible: false },
+    { id: 'cardLag',                 name: 'Commit-Apply Lag',    order: 8, defaultVisible: false },
+    { id: 'cardFailedRate',          name: 'Proposal Failed Rate',order: 9, defaultVisible: false },
+];
+
+// cardID → registry entry 快速查找
+const CARD_MAP = {};
+CARD_REGISTRY.forEach(c => { CARD_MAP[c.id] = c; });
+
+// Overview Cards 同时可见的最大数量（栅格为固定 7 列）
+const MAX_VISIBLE_CARDS = 7;
+
+// 默认面板配置（前 18 个面板可见，扩展面板默认隐藏除非 reg.defaultVisible 显式为 true；
+// cards 按 CARD_REGISTRY 默认值）
 function defaultPanelConfig() {
     return {
-        panels: PANEL_REGISTRY.map(p => ({ id: p.id, visible: p.order < 18, order: p.order })),
-        version: 1
+        panels: PANEL_REGISTRY.map(p => ({
+            id: p.id,
+            visible: p.defaultVisible !== undefined ? p.defaultVisible : (p.order < 18),
+            order: p.order
+        })),
+        cards:  CARD_REGISTRY.map(c => ({ id: c.id, visible: c.defaultVisible, order: c.order })),
     };
 }
 
@@ -118,31 +149,66 @@ async function savePanelConfig(config) {
     }
 }
 
-// 合并配置：过滤无效 ID，补充缺失的新面板
+// 合并配置：过滤无效 ID，补充缺失的新面板/卡片（id 匹配 + 补默认，不依赖 version 字段）
 function mergePanelConfig(cfg) {
-    var validIds = {};
-    PANEL_REGISTRY.forEach(function(p) { validIds[p.id] = true; });
+    var defaults = defaultPanelConfig();
 
-    var seen = {};
+    // ---- panels ----
+    var validPanelIds = {};
+    PANEL_REGISTRY.forEach(function(p) { validPanelIds[p.id] = true; });
+
+    var seenPanels = {};
     var panels = [];
-    // 保留用户已有的合法面板
     (cfg.panels || []).forEach(function(p) {
-        if (validIds[p.id] && !seen[p.id]) {
-            seen[p.id] = true;
+        if (validPanelIds[p.id] && !seenPanels[p.id]) {
+            seenPanels[p.id] = true;
             panels.push(p);
         }
     });
-    // 追加缺失的面板（使用默认配置中的可见性）
-    var defaults = defaultPanelConfig();
-    var defaultVisible = {};
-    defaults.panels.forEach(function(p) { defaultVisible[p.id] = p.visible; });
-    var nextOrder = panels.length;
+    var defaultPanelVisible = {};
+    defaults.panels.forEach(function(p) { defaultPanelVisible[p.id] = p.visible; });
+    var nextPanelOrder = panels.length;
     PANEL_REGISTRY.forEach(function(p) {
-        if (!seen[p.id]) {
-            panels.push({ id: p.id, visible: defaultVisible[p.id] !== undefined ? defaultVisible[p.id] : true, order: nextOrder++ });
+        if (!seenPanels[p.id]) {
+            panels.push({
+                id: p.id,
+                visible: defaultPanelVisible[p.id] !== undefined ? defaultPanelVisible[p.id] : true,
+                order: nextPanelOrder++
+            });
         }
     });
-    return { panels: panels, version: cfg.version || 1 };
+
+    // ---- cards（id 匹配 + 补默认，无 cards 字段时按默认全集生成）----
+    var validCardIds = {};
+    CARD_REGISTRY.forEach(function(c) { validCardIds[c.id] = true; });
+
+    var seenCards = {};
+    var cards = [];
+    var inputCards = Array.isArray(cfg.cards) ? cfg.cards : [];
+    inputCards.forEach(function(c) {
+        if (validCardIds[c.id] && !seenCards[c.id]) {
+            seenCards[c.id] = true;
+            cards.push({
+                id: c.id,
+                visible: !!c.visible,
+                order: typeof c.order === 'number' ? c.order : CARD_MAP[c.id].order
+            });
+        }
+    });
+    var defaultCardVisible = {};
+    defaults.cards.forEach(function(c) { defaultCardVisible[c.id] = c.visible; });
+    var nextCardOrder = cards.length;
+    CARD_REGISTRY.forEach(function(c) {
+        if (!seenCards[c.id]) {
+            cards.push({
+                id: c.id,
+                visible: defaultCardVisible[c.id] !== undefined ? defaultCardVisible[c.id] : c.defaultVisible,
+                order: nextCardOrder++
+            });
+        }
+    });
+
+    return { panels: panels, cards: cards };
 }
 
 // === Theme System ===
@@ -355,6 +421,43 @@ function renderPanels(config) {
             }
         }
     });
+
+    // Overview Cards 渲染（排序 + 显隐 + 栅格列数）
+    if (config.cards) {
+        renderOverviewCards(config.cards);
+    }
+}
+
+// 根据 cards 配置，重新排序并显隐 Overview Cards；动态覆写 grid-template-columns
+// 以使可见数少于 7 时也按 N 等分（1 ≤ N ≤ MAX_VISIBLE_CARDS），永不出现第二行。
+function renderOverviewCards(cards) {
+    var grid = document.querySelector('.overview-grid');
+    if (!grid) return;
+
+    // 建立 id → {visible, order}
+    var cfgMap = {};
+    cards.forEach(function(c) { cfgMap[c.id] = c; });
+
+    var cardEls = Array.from(grid.querySelectorAll('.stat-card[data-card-id]'));
+    // 按配置的 order 排序
+    cardEls.sort(function(a, b) {
+        var oa = cfgMap[a.dataset.cardId] ? cfgMap[a.dataset.cardId].order : 999;
+        var ob = cfgMap[b.dataset.cardId] ? cfgMap[b.dataset.cardId].order : 999;
+        return oa - ob;
+    });
+
+    var visibleCount = 0;
+    cardEls.forEach(function(el) {
+        var cfg = cfgMap[el.dataset.cardId];
+        var visible = cfg ? !!cfg.visible : true;
+        el.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+        grid.appendChild(el); // 重新插入 DOM 反映顺序
+    });
+
+    // 动态列数（至少 1 列，至多 MAX_VISIBLE_CARDS 列）
+    var cols = Math.max(1, Math.min(MAX_VISIBLE_CARDS, visibleCount || 1));
+    grid.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
 }
 
 // === Update Key Metrics Banner ===
@@ -466,6 +569,31 @@ function updateCards(metrics) {
     // Raft Index（直接显示完整数字）
     const raftIndex = metrics['raft_index'];
     document.getElementById('cardRaftIndex').textContent = raftIndex !== undefined ? Math.round(raftIndex).toString() : '-';
+
+    // Fragmentation Ratio（碎片占比 = 1 - in_use/total；值越高越糟）
+    const fragTotal = metrics['etcd_mvcc_db_total_size_in_bytes'];
+    const fragInUse = metrics['etcd_mvcc_db_total_size_in_use_in_bytes'];
+    const fragEl = document.getElementById('cardFragmentationRatio');
+    if (fragEl) {
+        if (fragTotal !== undefined && fragTotal > 0 && fragInUse !== undefined) {
+            const ratio = 1 - (fragInUse / fragTotal);
+            // 保护：浮点误差可能产生极小负数
+            const clamped = Math.max(0, Math.min(1, ratio));
+            fragEl.textContent = (clamped * 100).toFixed(2) + '%';
+            if (clamped > 0.6) {
+                fragEl.className = 'value red';
+            } else if (clamped >= 0.4) {
+                fragEl.className = 'value orange';
+            } else if (clamped >= 0.3) {
+                fragEl.className = 'value yellow';
+            } else {
+                fragEl.className = 'value green';
+            }
+        } else {
+            fragEl.textContent = '-';
+            fragEl.className = 'value';
+        }
+    }
 }
 
 // === Update Charts ===
@@ -648,6 +776,92 @@ function updateDBSize(data) {
         series: [
             makeSeries('Total Size', COLORS_().blue, data['etcd_mvcc_db_total_size_in_bytes'], { area: true }),
             makeSeries('In Use', COLORS_().cyan, data['etcd_mvcc_db_total_size_in_use_in_bytes'], { area: true })
+        ]
+    });
+}
+
+// Fragmentation Ratio 时序图
+// 计算：fragRatio = 1 - (in_use / total)；值越高代表碎片越多，建议 Defragment
+// 两个时序按下标对齐；分母为 0 或任一缺失时写 null（ECharts 断线）
+function updateFragmentationRatio(data) {
+    const chart = charts['chartFragmentationRatio'];
+    if (!chart) return;
+
+    const total = data['etcd_mvcc_db_total_size_in_bytes'] || [];
+    const inUse = data['etcd_mvcc_db_total_size_in_use_in_bytes'] || [];
+    const n = Math.min(total.length, inUse.length);
+    // 保持与 makeSeries 一致的 {ts, value} 格式
+    const fragSeries = [];
+    for (let i = 0; i < n; i++) {
+        const tPt = total[i];
+        const uPt = inUse[i];
+        const ts = tPt ? tPt.ts : (uPt ? uPt.ts : null);
+        if (ts == null) continue;
+        if (!tPt || !uPt || tPt.value == null || uPt.value == null || tPt.value === 0) {
+            fragSeries.push({ ts: ts, value: null });
+            continue;
+        }
+        const ratio = 1 - (uPt.value / tPt.value);
+        const clamped = Math.max(0, Math.min(1, ratio));
+        fragSeries.push({ ts: ts, value: clamped });
+    }
+
+    chart.setOption({
+        tooltip: {
+            ...TOOLTIP_(),
+            formatter: params => {
+                if (!params || !params.length) return '';
+                let html = formatTime(params[0].value[0] / 1000) + '<br/>';
+                params.forEach(p => {
+                    const v = p.value[1];
+                    if (v == null) {
+                        html += `${p.marker} ${p.seriesName}: -<br/>`;
+                    } else {
+                        html += `${p.marker} ${p.seriesName}: ${(v * 100).toFixed(2)}%<br/>`;
+                    }
+                });
+                html += '<span style="color:var(--text-muted);font-size:10px">Higher ratio means more wasted space; run Defragment.</span>';
+                return html;
+            }
+        },
+        legend: LEGEND_(),
+        grid: GRID_LEGEND,
+        xAxis: { type: 'time', ...AXIS_STYLE_() },
+        yAxis: {
+            type: 'value',
+            min: 0,
+            max: 1,
+            ...AXIS_STYLE_(),
+            axisLabel: { ...AXIS_STYLE_().axisLabel, formatter: v => (v * 100).toFixed(0) + '%' }
+        },
+        series: [
+            makeSeries('Fragmentation', COLORS_().cyan, fragSeries, {
+                area: true,
+                extra: {
+                    markLine: {
+                        silent: true,
+                        symbol: ['none', 'none'],
+                        lineStyle: { type: 'dashed', width: 1 },
+                        data: [
+                            {
+                                yAxis: 0.3,
+                                lineStyle: { color: COLORS_().yellow },
+                                label: { formatter: 'warning 30%', color: COLORS_().yellow, position: 'insideEndTop' }
+                            },
+                            {
+                                yAxis: 0.4,
+                                lineStyle: { color: COLORS_().orange },
+                                label: { formatter: 'caution 40%', color: COLORS_().orange, position: 'insideEndTop' }
+                            },
+                            {
+                                yAxis: 0.6,
+                                lineStyle: { color: COLORS_().red },
+                                label: { formatter: 'critical 60%', color: COLORS_().red, position: 'insideEndTop' }
+                            }
+                        ]
+                    }
+                }
+            })
         ]
     });
 }
@@ -1281,6 +1495,7 @@ async function refresh() {
     updateWALFsync(rangeData);
     updateBackendCommit(rangeData);
     updateDBSize(rangeData);
+    updateFragmentationRatio(rangeData);
     updateMVCCOps(rangeData);
     updatePeerTraffic(rangeData);
     updatePeerRTT(rangeData);
@@ -1615,8 +1830,77 @@ function buildPanelConfigList() {
     var container = document.getElementById('panelConfigList');
     container.innerHTML = '';
 
-    if (!_panelConfigDraft || !_panelConfigDraft.panels) return;
+    if (!_panelConfigDraft) return;
 
+    // ========== Overview Cards 分组 ==========
+    if (_panelConfigDraft.cards) {
+        var cardsLabel = document.createElement('div');
+        cardsLabel.className = 'config-section-label';
+        cardsLabel.innerHTML = 'Overview Cards' +
+            '<span class="card-count" id="cardCountLabel"></span>';
+        container.appendChild(cardsLabel);
+
+        var cardsDiv = document.createElement('div');
+        cardsDiv.dataset.configSection = 'cards';
+        container.appendChild(cardsDiv);
+
+        // 按 draft 中的 order 排序
+        var sortedCards = _panelConfigDraft.cards.slice().sort(function(a, b) {
+            return a.order - b.order;
+        });
+        sortedCards.forEach(function(card) {
+            var reg = CARD_MAP[card.id];
+            if (!reg) return;
+            var row = document.createElement('div');
+            row.className = 'config-panel-item';
+            row.draggable = true;
+            row.dataset.cardId = card.id;
+            row.dataset.section = 'cards';
+
+            var handle = document.createElement('span');
+            handle.className = 'config-drag-handle';
+            handle.textContent = '\u22EE\u22EE';
+            row.appendChild(handle);
+
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = card.visible;
+            cb.onchange = function() {
+                var c = findDraftCard(card.id);
+                if (c) c.visible = cb.checked;
+                updateCardCheckboxDisableState();
+                updateCardCountLabel();
+            };
+            row.appendChild(cb);
+
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'config-panel-name';
+            nameSpan.textContent = reg.name;
+            row.appendChild(nameSpan);
+
+            var tag = document.createElement('span');
+            tag.className = 'config-panel-section-tag';
+            tag.textContent = 'Card';
+            row.appendChild(tag);
+
+            // 拖拽事件复用 panel 的 handler（scope 由 dataset.section 控制跨区拦截）
+            row.addEventListener('dragstart', onDragStart);
+            row.addEventListener('dragend', onDragEnd);
+            row.addEventListener('dragover', onDragOver);
+            row.addEventListener('drop', onDrop);
+            row.addEventListener('dragleave', onDragLeave);
+
+            cardsDiv.appendChild(row);
+        });
+
+        // 初次构建后刷新禁用态与计数
+        updateCardCheckboxDisableState();
+        updateCardCountLabel();
+    }
+
+    if (!_panelConfigDraft.panels) return;
+
+    // ========== Monitoring Panels 分组（按分区） ==========
     // 按分区分组
     var sectionOrder = ['raft', 'disk', 'storage', 'lease', 'network', 'grpc', 'runtime'];
     var grouped = {};
@@ -1756,10 +2040,17 @@ function updateDraftOrderFromDOM(section) {
     var sectionDiv = document.querySelector('[data-config-section="' + section + '"]');
     if (!sectionDiv) return;
     var items = Array.from(sectionDiv.querySelectorAll('.config-panel-item'));
-    items.forEach(function(el, idx) {
-        var p = findDraftPanel(el.dataset.panelId);
-        if (p) p.order = idx;
-    });
+    if (section === 'cards') {
+        items.forEach(function(el, idx) {
+            var c = findDraftCard(el.dataset.cardId);
+            if (c) c.order = idx;
+        });
+    } else {
+        items.forEach(function(el, idx) {
+            var p = findDraftPanel(el.dataset.panelId);
+            if (p) p.order = idx;
+        });
+    }
 }
 
 function findDraftPanel(id) {
@@ -1767,10 +2058,78 @@ function findDraftPanel(id) {
     return _panelConfigDraft.panels.find(function(p) { return p.id === id; });
 }
 
+function findDraftCard(id) {
+    if (!_panelConfigDraft || !_panelConfigDraft.cards) return null;
+    return _panelConfigDraft.cards.find(function(c) { return c.id === id; });
+}
+
+// 前置禁用（A1 防线）：达到 7 张上限时，未勾选的 checkbox 置灰不可点。
+function updateCardCheckboxDisableState() {
+    if (!_panelConfigDraft || !_panelConfigDraft.cards) return;
+    var cardsDiv = document.querySelector('[data-config-section="cards"]');
+    if (!cardsDiv) return;
+
+    var visibleCount = _panelConfigDraft.cards.filter(function(c) { return c.visible; }).length;
+    var atOrOver = visibleCount >= MAX_VISIBLE_CARDS;
+
+    var rows = Array.from(cardsDiv.querySelectorAll('.config-panel-item'));
+    rows.forEach(function(row) {
+        var cb = row.querySelector('input[type="checkbox"]');
+        if (!cb) return;
+        if (atOrOver && !cb.checked) {
+            cb.disabled = true;
+            cb.classList.add('checkbox-disabled');
+            cb.title = 'Max ' + MAX_VISIBLE_CARDS + ' cards reached — uncheck another to enable this one';
+            row.classList.add('card-item-disabled');
+        } else {
+            cb.disabled = false;
+            cb.classList.remove('checkbox-disabled');
+            cb.removeAttribute('title');
+            row.classList.remove('card-item-disabled');
+        }
+    });
+}
+
+// 更新 Overview Cards 分组 header 右侧的 "已选择 X / 7" 计数
+function updateCardCountLabel() {
+    var label = document.getElementById('cardCountLabel');
+    if (!label || !_panelConfigDraft || !_panelConfigDraft.cards) return;
+    var visibleCount = _panelConfigDraft.cards.filter(function(c) { return c.visible; }).length;
+    label.textContent = visibleCount + ' / ' + MAX_VISIBLE_CARDS + ' selected';
+    label.classList.remove('at-limit', 'over-limit');
+    if (visibleCount > MAX_VISIBLE_CARDS) {
+        label.classList.add('over-limit');
+    } else if (visibleCount === MAX_VISIBLE_CARDS) {
+        label.classList.add('at-limit');
+    }
+}
+
 async function savePanelConfigUI() {
     if (!_panelConfigDraft) return;
 
-    // Collect final state from DOM (checkbox states + order)
+    // ---- 收集 Overview Cards 分组的最终状态 ----
+    var cardsDiv = document.querySelector('[data-config-section="cards"]');
+    if (cardsDiv && _panelConfigDraft.cards) {
+        var cardItems = Array.from(cardsDiv.querySelectorAll('.config-panel-item'));
+        cardItems.forEach(function(el, idx) {
+            var c = findDraftCard(el.dataset.cardId);
+            if (c) {
+                var cb = el.querySelector('input[type="checkbox"]');
+                c.visible = cb ? cb.checked : true;
+                c.order = idx;
+            }
+        });
+
+        // 保存兜底（A2 防线）：即便用户通过 DevTools 绕过前置禁用，也会在此拦截
+        var visibleCards = _panelConfigDraft.cards.filter(function(c) { return c.visible; });
+        if (visibleCards.length > MAX_VISIBLE_CARDS) {
+            var overBy = visibleCards.length - MAX_VISIBLE_CARDS;
+            alert('At most ' + MAX_VISIBLE_CARDS + ' cards can be visible at once. Please uncheck ' + overBy + ' more.');
+            return;
+        }
+    }
+
+    // ---- 收集 Monitoring Panels 各分区的最终状态 ----
     var sections = ['raft', 'disk', 'storage', 'network', 'grpc', 'runtime', 'lease'];
     var globalOrder = 0;
     sections.forEach(function(section) {

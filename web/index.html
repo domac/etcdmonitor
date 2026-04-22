@@ -139,48 +139,53 @@
 
     <!-- Overview Cards -->
     <div class="overview-grid">
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardLeader">
             <div class="label">Leader Status</div>
             <div class="value green" id="cardLeader">-</div>
             <div class="sub" id="cardLeaderSub">-</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardLeaderChanges">
             <div class="label">Leader Changes</div>
             <div class="value orange" id="cardLeaderChanges">-</div>
             <div class="sub">total elections</div>
         </div>
-        <div class="stat-card member-card" id="memberCard">
+        <div class="stat-card member-card" id="memberCard" data-card-id="cardMemberSize">
             <div class="label">Members</div>
             <div class="value cyan" id="cardMemberSize">-</div>
             <div class="sub">cluster size</div>
             <div class="member-tooltip" id="memberTooltip"></div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardRaftTerm">
             <div class="label">Raft Term</div>
             <div class="value cyan" id="cardRaftTerm">-</div>
             <div class="sub">current term</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardRaftIndex">
             <div class="label">Raft Index</div>
             <div class="value purple" id="cardRaftIndex">-</div>
             <div class="sub">commit index</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardWAL">
             <div class="label">WAL Fsync P99</div>
             <div class="value orange" id="cardWAL">-</div>
             <div class="sub">target &lt; 10ms</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardFragmentationRatio">
+            <div class="label">Fragmentation Ratio</div>
+            <div class="value green" id="cardFragmentationRatio">-</div>
+            <div class="sub">fragmented space</div>
+        </div>
+        <div class="stat-card" data-card-id="cardPending">
             <div class="label">Proposals Pending</div>
             <div class="value purple" id="cardPending">-</div>
             <div class="sub">raft proposals</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardLag">
             <div class="label">Commit-Apply Lag</div>
             <div class="value cyan" id="cardLag">-</div>
             <div class="sub">committed - applied</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card-id="cardFailedRate">
             <div class="label">Proposal Failed Rate</div>
             <div class="value red" id="cardFailedRate">-</div>
             <div class="sub">per second</div>
@@ -285,6 +290,13 @@
                 <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
             </div>
             <div class="panel-body" id="chartDBSize"></div>
+        </div>
+        <div class="panel" data-panel-id="chartFragmentationRatio">
+            <div class="panel-header">
+                <span class="panel-title">Fragmentation Ratio</span>
+                <span class="panel-header-actions"><span class="panel-tag">Gauge</span><button class="panel-maximize-btn" onclick="togglePanelMaximize(this)" title="Maximize"><svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button></span>
+            </div>
+            <div class="panel-body" id="chartFragmentationRatio"></div>
         </div>
         <div class="panel" data-panel-id="chartMVCCOps">
             <div class="panel-header">

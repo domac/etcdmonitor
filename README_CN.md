@@ -317,15 +317,22 @@ log:
 
 ### 概览卡片
 
-| 卡片 | 告警条件 |
-|---|---|
-| Leader 状态 | 无 Leader 时变红 |
-| Leader 变更 | 关注频繁变更 |
-| 成员数 | 集群规模，悬停查看成员详情 |
-| WAL Fsync P99 | > 10ms 时变红 |
-| Proposals 待处理 | > 5 时变红 |
-| Commit-Apply 延迟 | > 50 时变红 |
-| Proposal 失败率 | > 0/s 时变红 |
+最多可同时展示 **7 张卡片**（栅格固定为 7 列，不换行）。点击右上角齿轮图标 ⚙ 可配置可见卡片与顺序。默认可见性：
+
+| 卡片 | 默认 | 告警条件 |
+|---|---|---|
+| Leader 状态 | ✅ 显示 | 无 Leader 时变红 |
+| Leader 变更 | ✅ 显示 | 关注频繁变更 |
+| 成员数 | ✅ 显示 | 集群规模，悬停查看成员详情 |
+| Raft Term | ✅ 显示 | 当前 raft term |
+| Raft Index | ✅ 显示 | 当前 commit index |
+| WAL Fsync P99 | ✅ 显示 | > 10ms 时变红 |
+| **Fragmentation Ratio** | ✅ 显示 | `1 - in_use/total`。< 30% 绿色，30–40% 黄色，40–60% 橙色，> 60% 红色（建议 Defragment） |
+| Proposals 待处理 | ⬜ 默认隐藏 | > 5 时变红 |
+| Commit-Apply 延迟 | ⬜ 默认隐藏 | > 50 时变红 |
+| Proposal 失败率 | ⬜ 默认隐藏 | > 0/s 时变红 |
+
+如果通过齿轮图标尝试勾选超过 7 张卡片，第 8 个复选框会立即置灰不可点；前端保存会被拦截并弹出提示，后端亦会返回 HTTP 400 `{"error":"too many visible cards","max":7}` 作为兜底。
 
 ### 图表面板（25 个图表，18 个默认 + 7 个扩展）
 
@@ -335,7 +342,7 @@ log:
 | **Raft & Server** *（扩展）* | 服务健康 & 配额 | `quota_backend_bytes`、`heartbeat_send_failures`、`health_*`、`client_requests` 按 API 版本 |
 | **磁盘性能** | WAL Fsync 耗时、Backend Commit 耗时 | P50/P90/P99 延迟直方图 |
 | **磁盘性能** *（扩展）* | 快照 & 碎片整理耗时、Backend Commit 分阶段 | `defrag`/`snapshot`/`snap_db` 延迟，commit 子阶段 `rebalance`/`spill`/`write` P50/P90/P99 |
-| **MVCC & 存储** | 数据库大小、MVCC 操作 | `db_total_size`、`put/delete/txn/range` 累计 |
+| **MVCC & 存储** | 数据库大小、MVCC 操作、**Fragmentation Ratio** | `db_total_size`、`put/delete/txn/range` 累计、`1 - in_use/total`（值越高代表碎片越多，建议 Defragment） |
 | **MVCC & 存储** *（扩展）* | MVCC Revision & 压缩、Watcher & 事件 | `compact/current_revision`、`compaction_keys/duration`、`events_total`、`pending_events`、`watch_stream`、`slow_watcher` |
 | **Lease 管理** *（扩展）* | Lease 活动 | `lease_granted/revoked/renewed/expired` 累计 |
 | **网络 & 对等节点** | 对等节点流量、对等节点 RTT | `peer_sent/received_bytes`、RTT P50/P90/P99 |

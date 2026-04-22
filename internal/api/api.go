@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -218,6 +219,19 @@ func (a *API) handlePutPanelConfig(c *gin.Context) {
 	var cfg prefs.PanelConfig
 	if err := json.NewDecoder(io.LimitReader(c.Request.Body, 64*1024)).Decode(&cfg); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+
+	// 校验：visible=true 的 cards 数量不得超过上限（后端兜底，防止绕过前端）
+	if err := prefs.ValidatePanelConfig(&cfg); err != nil {
+		if errors.Is(err, prefs.ErrTooManyVisibleCards) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "too many visible cards",
+				"max":   prefs.MaxVisibleCards,
+			})
+			return
+		}
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

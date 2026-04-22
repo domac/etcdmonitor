@@ -2,6 +2,7 @@ package prefs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,13 @@ import (
 	"etcdmonitor/internal/logger"
 )
 
+// MaxVisibleCards 同一用户可同时可见（visible=true）的 Overview Cards 数量上限。
+// 必须与前端 app.js 中的 MAX_VISIBLE_CARDS 保持一致。
+const MaxVisibleCards = 7
+
+// ErrTooManyVisibleCards 当请求体中 visible=true 的 cards 数量超过 MaxVisibleCards 时返回。
+var ErrTooManyVisibleCards = errors.New("too many visible cards")
+
 // PanelItem 单个面板的配置
 type PanelItem struct {
 	ID      string `json:"id"`
@@ -18,10 +26,20 @@ type PanelItem struct {
 	Order   int    `json:"order"`
 }
 
+// CardPref 单张 Overview Card 的用户偏好
+type CardPref struct {
+	ID      string `json:"id"`
+	Visible bool   `json:"visible"`
+	Order   int    `json:"order"`
+}
+
 // PanelConfig 用户的面板配置
+// 注意：不引入 Version 字段（极简派），依赖 mergeWithDefaults 的 id 匹配 + 补默认策略
+// 来兼容老文件；未来如有破坏性结构变更再引入 Version。
 type PanelConfig struct {
-	Panels  []PanelItem `json:"panels"`
-	Version int         `json:"version"`
+	Panels []PanelItem `json:"panels"`
+	// Cards 可选字段；老文件可能没有，读取后保持为 nil 由前端 merge 补齐默认值
+	Cards []CardPref `json:"cards,omitempty"`
 }
 
 // DefaultPanels 默认面板列表（全选、原始顺序）
@@ -53,15 +71,17 @@ var DefaultPanels = []PanelItem{
 	{ID: "chartWatcherEvents", Visible: false, Order: 23},
 	{ID: "chartLeaseActivity", Visible: false, Order: 24},
 	{ID: "chartActivePeersGRPC", Visible: false, Order: 25},
+	// === Fragmentation Ratio 面板（默认可见） ===
+	{ID: "chartFragmentationRatio", Visible: true, Order: 26},
 }
 
 // DefaultConfig 返回默认面板配置
+// Cards 字段留空由前端 merge 补齐（与前端极简派 merge 策略一致）
 func DefaultConfig() *PanelConfig {
 	panels := make([]PanelItem, len(DefaultPanels))
 	copy(panels, DefaultPanels)
 	return &PanelConfig{
-		Panels:  panels,
-		Version: 1,
+		Panels: panels,
 	}
 }
 
@@ -185,4 +205,24 @@ func mergeWithDefaults(panels []PanelItem) []PanelItem {
 	}
 
 	return result
+}
+
+// ValidatePanelConfig 校验客户端提交的配置是否合法：
+//   - Cards 中 Visible=true 的数量不得超过 MaxVisibleCards（当前为 7）
+//   - Cards 为空/nil 视为合法（由前端 merge 补齐默认值）
+//   - Panels 暂不做数量限制（与既有行为一致，由 mergeWithDefaults 过滤无效 ID）
+func ValidatePanelConfig(cfg *PanelConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	visibleCards := 0
+	for _, c := range cfg.Cards {
+		if c.Visible {
+			visibleCards++
+		}
+	}
+	if visibleCards > MaxVisibleCards {
+		return fmt.Errorf("%w: %d visible (max %d)", ErrTooManyVisibleCards, visibleCards, MaxVisibleCards)
+	}
+	return nil
 }
