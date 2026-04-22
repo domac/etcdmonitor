@@ -67,16 +67,16 @@ etcdmonitor is **one binary** that gives you a production-grade
 Dashboard, a KV browser/editor, and a cluster-ops panel — without
 deploying Prometheus, Grafana, or an extra exporter.
 
-|  | **etcdmonitor** | Grafana + Prometheus + etcd-exporter | etcdkeeper |
-|---|---|---|---|
-| Deployment | Single binary | 3+ components | Single binary |
-| Metrics coverage | 80+ out of the box | 100+ (requires dashboards) | — |
-| KV management (v2 + v3) | ✅ | ❌ | ✅ |
-| Ops actions (Defrag / Snapshot / Compact / HashKV / Move Leader) | ✅ | Alerting only | ❌ |
-| Audit log | ✅ built-in | Requires extra setup | ❌ |
-| Local admin login | ✅ | Grafana built-in | ❌ |
-| Dark / Light theme | ✅ | ✅ | ❌ |
-| Best-fit scenario | Small/mid clusters, all-in-one ops | Large-scale multi-cluster aggregation | KV browsing only |
+|  | **etcdmonitor** | Grafana + Prometheus + etcd-exporter |
+|---|---|---|
+| Deployment | Single binary | 3+ components |
+| Metrics coverage | 80+ out of the box | 100+ (requires dashboards) |
+| KV management (v2 + v3) | ✅ | ❌ |
+| Ops actions (Defrag / Snapshot / Compact / HashKV / Move Leader) | ✅ | Alerting only |
+| Audit log | ✅ built-in | Requires extra setup |
+| Local admin login | ✅ | Grafana built-in |
+| Dark / Light theme | ✅ | ✅ |
+| Best-fit scenario | Small/mid clusters, all-in-one ops | Large-scale multi-cluster aggregation |
 
 **Use etcdmonitor when** you want a single binary to answer "is my etcd
 healthy, what's inside its KV space, and can I run maintenance on it?"

@@ -64,16 +64,16 @@
 
 etcdmonitor 是 **一个二进制**，就能提供生产可用的 Dashboard、KV 浏览/编辑器和集群运维面板 —— 无需部署 Prometheus、Grafana 或额外的 exporter。
 
-|  | **etcdmonitor** | Grafana + Prometheus + etcd-exporter | etcdkeeper |
-|---|---|---|---|
-| 部署形态 | 单二进制 | 3+ 组件 | 单二进制 |
-| 开箱指标 | 80+ | 100+（需自配 Dashboard） | — |
-| KV 管理（v2 + v3） | ✅ | ❌ | ✅ |
-| 运维操作（Defrag / Snapshot / Compact / HashKV / Move Leader） | ✅ | 仅告警 | ❌ |
-| 审计日志 | ✅ 内建 | 需额外配置 | ❌ |
-| 本地管理员登录 | ✅ | Grafana 自带 | ❌ |
-| 暗色 / 亮色主题 | ✅ | ✅ | ❌ |
-| 最佳场景 | 中小集群一体化运维 | 多集群大规模指标聚合 | 仅浏览 KV |
+|  | **etcdmonitor** | Grafana + Prometheus + etcd-exporter |
+|---|---|---|
+| 部署形态 | 单二进制 | 3+ 组件 |
+| 开箱指标 | 80+ | 100+（需自配 Dashboard） |
+| KV 管理（v2 + v3） | ✅ | ❌ |
+| 运维操作（Defrag / Snapshot / Compact / HashKV / Move Leader） | ✅ | 仅告警 |
+| 审计日志 | ✅ 内建 | 需额外配置 |
+| 本地管理员登录 | ✅ | Grafana 自带 |
+| 暗色 / 亮色主题 | ✅ | ✅ |
+| 最佳场景 | 中小集群一体化运维 | 多集群大规模指标聚合 |
 
 **何时选 etcdmonitor**：你想用一个二进制回答"我的 etcd 健康吗、KV 里有什么、能不能做日常运维"，而不想搭建一整套可观测性栈。
 
