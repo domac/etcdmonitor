@@ -57,8 +57,6 @@
 - [路线图](#路线图)
 - [社区与支持](#社区与支持)
 - [贡献](#贡献)
-- [贡献者](#贡献者)
-- [Star History](#star-history)
 - [致谢](#致谢)
 - [许可](#许可)
 
@@ -237,16 +235,6 @@ storage:
 4. 推送并基于模板发起 Pull Request
 
 > **安全问题** 必须按 [SECURITY.md](./SECURITY.md) 私下上报 —— 切勿在公开 Issue 中发布。
-
-## 贡献者
-
-感谢所有为 etcdmonitor 做出贡献的人！
-
-[![Contributors](https://contrib.rocks/image?repo=domac/etcdmonitor)](https://github.com/domac/etcdmonitor/graphs/contributors)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=domac/etcdmonitor&type=Date)](https://star-history.com/#domac/etcdmonitor&Date)
 
 ## 致谢
 

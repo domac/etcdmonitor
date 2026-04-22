@@ -58,8 +58,6 @@
 - [Roadmap](#roadmap)
 - [Community & Support](#community--support)
 - [Contributing](#contributing)
-- [Contributors](#contributors)
-- [Star History](#star-history)
 - [Acknowledgments](#acknowledgments)
 - [License](#license)
 
@@ -249,16 +247,6 @@ conventions, vendor deps, testing) lives in
 
 > **Security issues** must be reported privately per
 > [SECURITY.md](./SECURITY.md) — never in public issues.
-
-## Contributors
-
-Thanks to everyone who has contributed to etcdmonitor!
-
-[![Contributors](https://contrib.rocks/image?repo=domac/etcdmonitor)](https://github.com/domac/etcdmonitor/graphs/contributors)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=domac/etcdmonitor&type=Date)](https://star-history.com/#domac/etcdmonitor&Date)
 
 ## Acknowledgments
 
