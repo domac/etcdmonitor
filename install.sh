@@ -6,12 +6,13 @@ echo "  etcdmonitor - Install Script"
 echo "========================================="
 
 # === CLI flags ===
-# Default: run as root (matches the historical 0.8.x behavior).
-# Operators are strongly encouraged to use a dedicated non-root user instead:
+# Run-user priority: CLI --run-user > config.yaml service.run_user > install-meta > $(whoami)
+# Operators are strongly encouraged to use a dedicated non-root user:
 #     sudo useradd -r -s /sbin/nologin -d <INSTALL_DIR> etcdmonitor
 #     sudo ./install.sh --run-user etcdmonitor
+# Or set `service.run_user: etcdmonitor` in config.yaml.
 # See docs/SECURITY_CHECKLIST.md for the full production recommendation.
-RUN_USER="root"
+RUN_USER=""
 CLI_RUN_USER=""
 CLI_WORK_DIR=""
 FORCE=false
@@ -38,7 +39,9 @@ for arg in "$@"; do
 Usage: sudo ./install.sh [--run-user <name>] [--work-dir <path>] [--force]
 
   --run-user <name>   Run etcdmonitor as the given system user (must exist).
-                      Default: root.
+                      Default: \$(whoami) (root when using sudo).
+                      Can also be set via config.yaml: service.run_user
+                      Priority: CLI --run-user > config.yaml > install-meta > \$(whoami)
                       Production recommendation: --run-user etcdmonitor
                       (create with: useradd -r -s /sbin/nologin -d <dir> etcdmonitor)
 
@@ -92,13 +95,36 @@ if [ -f "$META_FILE" ]; then
     META_RUN_USER="${RUN_USER:-}"
     # Reset WORK_DIR/RUN_USER sourced from meta (will re-derive below)
     unset WORK_DIR
-    # Restore RUN_USER from CLI or default
-    if [ -n "$CLI_RUN_USER" ]; then
-        RUN_USER="$CLI_RUN_USER"
-    elif [ -n "$META_RUN_USER" ]; then
-        RUN_USER="$META_RUN_USER"
-        echo "[INFO] Using RUN_USER=$RUN_USER from previous installation record"
-    fi
+    RUN_USER=""
+fi
+
+# ===== Read service.run_user from config.yaml =====
+CONFIG_RUN_USER=""
+SRC_CONFIG_EARLY="$INSTALL_DIR/config.yaml"
+if [ -f "$SRC_CONFIG_EARLY" ]; then
+    CONFIG_RUN_USER=$(awk '
+        /^service:/            { in_service=1; next }
+        /^[a-zA-Z]/ && in_service { in_service=0 }
+        in_service && /^[[:space:]]+run_user:/ {
+            val=$2
+            gsub(/^["'\''"]|["'\''"]$/, "", val)
+            print val
+            exit
+        }
+    ' "$SRC_CONFIG_EARLY" || true)
+fi
+
+# ===== Resolve RUN_USER (priority: CLI > config.yaml > install-meta > whoami) =====
+if [ -n "$CLI_RUN_USER" ]; then
+    RUN_USER="$CLI_RUN_USER"
+elif [ -n "$CONFIG_RUN_USER" ]; then
+    RUN_USER="$CONFIG_RUN_USER"
+    echo "[INFO] Using run_user=$RUN_USER from config.yaml"
+elif [ -n "$META_RUN_USER" ]; then
+    RUN_USER="$META_RUN_USER"
+    echo "[INFO] Using RUN_USER=$RUN_USER from previous installation record"
+else
+    RUN_USER="$(whoami)"
 fi
 
 # ===== Resolve WORK_DIR =====
@@ -150,19 +176,31 @@ if [ -n "$META_WORK_DIR" ]; then
     fi
 fi
 
-# 检查二进制文件（优先 etcdmonitor，兼容 etcdmonitor-linux-amd64）
+# 检测当前系统架构并映射为 Go 命名
+detect_arch() {
+    local machine
+    machine=$(uname -m)
+    case "$machine" in
+        x86_64)       echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *)            echo "$machine" ;;
+    esac
+}
+CURRENT_ARCH=$(detect_arch)
+
+# 检查二进制文件（优先 etcdmonitor，回退到 etcdmonitor-linux-<arch>）
 if [ -f "$INSTALL_DIR/etcdmonitor" ]; then
     SRC_BINARY="$INSTALL_DIR/etcdmonitor"
     BINARY_NAME="etcdmonitor"
-elif [ -f "$INSTALL_DIR/etcdmonitor-linux-amd64" ]; then
-    SRC_BINARY="$INSTALL_DIR/etcdmonitor-linux-amd64"
-    BINARY_NAME="etcdmonitor-linux-amd64"
+elif [ -f "$INSTALL_DIR/etcdmonitor-linux-${CURRENT_ARCH}" ]; then
+    SRC_BINARY="$INSTALL_DIR/etcdmonitor-linux-${CURRENT_ARCH}"
+    BINARY_NAME="etcdmonitor-linux-${CURRENT_ARCH}"
 else
     echo "[WARN] Binary not found, trying to build..."
     if command -v go &> /dev/null; then
-        echo "[INFO] Building..."
+        echo "[INFO] Building for linux/${CURRENT_ARCH}..."
         cd "$INSTALL_DIR"
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o etcdmonitor ./cmd/etcdmonitor
+        CGO_ENABLED=0 GOOS=linux GOARCH="$CURRENT_ARCH" go build -ldflags="-s -w" -o etcdmonitor ./cmd/etcdmonitor
         SRC_BINARY="$INSTALL_DIR/etcdmonitor"
         BINARY_NAME="etcdmonitor"
     else
@@ -232,12 +270,9 @@ BINARY="$WORK_DIR/$BINARY_NAME"
 CONFIG="$WORK_DIR/config.yaml"
 
 # ===== 运行用户配置 =====
-# 默认以 root 运行（与 0.8.x 保持一致）。生产环境强烈建议使用非 root 专用用户。
-RUN_USER="${RUN_USER:-root}"
-if [ "$RUN_USER" != "root" ]; then
-    WARN_MSG="[INFO] Running etcdmonitor as dedicated user: $RUN_USER"
-else
-    WARN_MSG="[WARN] Running etcdmonitor as root. For production, prefer: --run-user etcdmonitor (create via useradd -r -s /sbin/nologin -d $WORK_DIR etcdmonitor)"
+# 优先级：CLI --run-user > config.yaml service.run_user > install-meta > $(whoami)
+if [ "$RUN_USER" = "root" ]; then
+    WARN_MSG="[WARN] Running etcdmonitor as root. For production, prefer: --run-user etcdmonitor (create via useradd -r -s /sbin/nologin -d $WORK_DIR etcdmonitor) or set service.run_user in config.yaml"
     echo "$WARN_MSG"
     if command -v logger >/dev/null 2>&1; then
         logger -t etcdmonitor "$WARN_MSG"
@@ -251,7 +286,7 @@ if ! id "$RUN_USER" &>/dev/null; then
     echo "  Create it first with:"
     echo "      useradd -r -s /sbin/nologin -d $WORK_DIR $RUN_USER"
     echo ""
-    echo "  Or drop --run-user to use root (default)."
+    echo "  Or remove --run-user / service.run_user to use \$(whoami) default."
     exit 1
 fi
 
@@ -378,7 +413,7 @@ sleep 2
 # 检查状态
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     # 获取监听端口和 TLS 状态
-    LISTEN_PORT=$(grep -A1 "^server:" "$CONFIG" | grep "listen" | grep -oP ':\K[0-9]+' || echo "9090")
+    LISTEN_PORT=$(grep -A1 "^server:" "$CONFIG" | grep "listen" | grep -Eo '[0-9]+' || echo "9090")
     TLS_ENABLED=$(grep "tls_enable" "$CONFIG" | grep -i "true" || true)
     if [ -n "$TLS_ENABLED" ]; then
         PROTOCOL="https"

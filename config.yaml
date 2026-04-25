@@ -83,6 +83,13 @@ auth:
   # 修改/重置密码时的最小长度，默认 8
   min_password_length: 8
 
+service:
+  # 服务运行用户（可选）
+  # 安装时 install.sh 读取此配置决定以哪个系统用户运行 etcdmonitor 服务。
+  # 优先级：CLI --run-user > 此配置 > install-meta 历史记录 > $(whoami)
+  # 留空或注释掉表示不指定，默认使用当前执行安装的用户（sudo 下为 root）。
+  # run_user: "etcdmonitor"
+
 log:
   # 日志目录（相对于程序所在目录）
   dir: "logs"

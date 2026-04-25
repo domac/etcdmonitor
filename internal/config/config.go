@@ -63,6 +63,10 @@ type Config struct {
 		AuditRetentionDays int   `yaml:"audit_retention_days"`
 	} `yaml:"ops"`
 
+	Service struct {
+		RunUser string `yaml:"run_user"`
+	} `yaml:"service"`
+
 	Auth struct {
 		BcryptCost             int `yaml:"bcrypt_cost"`
 		LockoutThreshold       int `yaml:"lockout_threshold"`
