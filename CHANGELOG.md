@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.8.1] - 2026-04-25
+
+### Added
+
+- **自定义工作目录**：`install.sh` 新增 `--work-dir <path>` 参数，支持将运行时文件（二进制、配置、数据、日志）部署到独立于解压目录的指定路径
+  - systemd service 的 `WorkingDirectory`、`ExecStart`、`ReadWritePaths` 自动指向工作目录
+  - 安装完成后工作目录中不保留 `install.sh`，防止误操作；`uninstall.sh` 保留以支持正常卸载
+  - 未指定 `--work-dir` 时行为完全向后兼容
+- **安装记录持久化**：安装参数写入 `/etc/etcdmonitor/install-meta`（shell-sourceable key=value 格式）
+  - 升级时自动读取，无需重复指定 `--work-dir` / `--run-user`
+  - 命令行参数优先级高于记录值
+- **工作目录迁移检测**：二次安装指定不同 `--work-dir` 时自动阻断，给出三步迁移指引（uninstall → 迁移数据 → 重装）
+  - 新增 `--force` 参数可跳过检测，强制安装到新目录
+  - `--force` 时自动将旧目录 `uninstall.sh` 重命名为 `uninstall.sh.disabled`，防止误操作干掉新服务
+- **config.yaml 升级保护**：目标工作目录已有 `config.yaml` 时交互确认是否覆盖，默认保留现有配置
+- **参数单双横线兼容**：`-work-dir`、`-run-user`、`-force` 等单横线写法均正确识别
+
+### Changed
+
+- `install.sh` 内部引入 `WORK_DIR` 变量，所有运行时路径（data/logs/certs/binary/config）引用 `WORK_DIR`，安装源文件引用 `INSTALL_DIR`
+- `install.sh` 完成提示新增工作目录路径、卸载命令、重装说明（区分就地安装和自定义目录模式）
+- `uninstall.sh` 卸载时清理 `/etc/etcdmonitor/` 安装记录目录
+- `uninstall.sh` 完成提示根据 `install.sh` 是否存在动态调整重装指引
+- `--run-user` 用户不存在时 `useradd -d` 提示路径改为 `$WORK_DIR`
+
 ## [0.8.0] - 2026-04-20
 
 ### Added

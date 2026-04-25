@@ -32,6 +32,12 @@ if [ -f "$SERVICE_FILE" ]; then
     systemctl daemon-reload
 fi
 
+# 清理安装元信息
+if [ -d "/etc/etcdmonitor" ]; then
+    echo "[INFO] Removing install metadata (/etc/etcdmonitor/)..."
+    rm -rf /etc/etcdmonitor
+fi
+
 echo ""
 
 # 询问是否删除运行时数据
@@ -58,7 +64,11 @@ echo "========================================="
 echo "[OK] etcdmonitor uninstalled successfully!"
 echo ""
 echo "  Service removed, binary and config preserved."
-echo "  You can re-install anytime: sudo ./install.sh"
+if [ -f "$INSTALL_DIR/install.sh" ]; then
+    echo "  You can re-install anytime: sudo ./install.sh"
+else
+    echo "  To re-install, run install.sh from the original package."
+fi
 echo ""
 echo "  To completely remove everything:"
 echo "    rm -rf $INSTALL_DIR"
