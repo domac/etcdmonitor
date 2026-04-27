@@ -31,13 +31,13 @@
 
 [data-theme="light"] {
     --bg-primary: #F7F5F2;
-    --bg-secondary: #ffffff;
-    --bg-card: #ffffff;
+    --bg-secondary: #FEFCFA;
+    --bg-card: #FEFCFA;
     --bg-card-hover: #F5F3F0;
     --border-color: #E8E4DF;
     --text-primary: #1A1815;
     --text-secondary: #6B6560;
-    --text-muted: #9C9590;
+    --text-muted: #948E88;
     --accent-blue: #0969da;
     --accent-green: #1a7f37;
     --accent-red: #cf222e;
@@ -2018,18 +2018,18 @@ body {
 [data-theme="light"] .ops-sidebar { border-right-color: #E8E4DF; }
 [data-theme="light"] .ops-sidebar-item:hover { background: #F5F3F0; }
 [data-theme="light"] .ops-sidebar-item.active { background: #F5F3F0; }
-[data-theme="light"] .ops-member-list { background: #fff; border-color: #E8E4DF; }
+[data-theme="light"] .ops-member-list { background: var(--bg-card); border-color: #E8E4DF; }
 [data-theme="light"] .ops-member-item { border-color: #F0EDE8; }
-[data-theme="light"] .ops-info { background: #fff; border-color: #E8E4DF; }
-[data-theme="light"] .ops-dialog { background: #fff; border-color: #E8E4DF; }
+[data-theme="light"] .ops-info { background: var(--bg-card); border-color: #E8E4DF; }
+[data-theme="light"] .ops-dialog { background: var(--bg-secondary); border-color: #E8E4DF; }
 [data-theme="light"] .ops-table td { border-color: #F0EDE8; }
 [data-theme="light"] .ops-table th { border-color: #E8E4DF; }
-[data-theme="light"] .ops-table tbody tr:nth-child(even) td { background: #FAFAF8; }
-[data-theme="light"] .ops-toast { background: #fff; border-color: #E8E4DF; }
-[data-theme="light"] .ops-filter-select { background: #fff; border-color: #E8E4DF; }
-[data-theme="light"] .ops-export-btn { background: #fff; border-color: #E8E4DF; }
-[data-theme="light"] .ops-btn-secondary { background: #fff; border-color: #E8E4DF; }
-[data-theme="light"] .ops-pagination button { background: #fff; border-color: #E8E4DF; }
+[data-theme="light"] .ops-table tbody tr:nth-child(even) td { background: var(--bg-card); }
+[data-theme="light"] .ops-toast { background: var(--bg-secondary); border-color: #E8E4DF; }
+[data-theme="light"] .ops-filter-select { background: var(--bg-card); border-color: #E8E4DF; }
+[data-theme="light"] .ops-export-btn { background: var(--bg-card); border-color: #E8E4DF; }
+[data-theme="light"] .ops-btn-secondary { background: var(--bg-card); border-color: #E8E4DF; }
+[data-theme="light"] .ops-pagination button { background: var(--bg-card); border-color: #E8E4DF; }
 
 /* ============================================
    KV Ace Editor Theme Alignment
