@@ -983,8 +983,17 @@ body {
     color: var(--text-primary);
 }
 
-/* KV Layout: Tree + Editor */
+/* KV Layout: Cluster Tab Bar (full width) above Tree + Editor */
 .kv-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Inner row that holds tree + resize handle + editor */
+.kv-layout-row {
     display: flex;
     gap: 12px;
     flex: 1;
@@ -1549,7 +1558,7 @@ body {
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     font-size: 13px;
     font-weight: 500;
-    z-index: 1100;
+    z-index: 1300;
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
     opacity: 0;
     transform: translateY(-10px);
@@ -2120,3 +2129,372 @@ body {
 .ace-chrome .ace_invisible {
     color: var(--text-muted);
 }
+
+/* ============================================ */
+/* KV Multi-Cluster Tab Bar (kv-cluster-tab-bar) */
+/* ============================================ */
+
+/* Theme tokens — dark default */
+:root {
+    --kv-tab-bg: rgba(255, 255, 255, 0.04);
+    --kv-tab-active-bg: var(--bg-card);
+    --kv-tab-hover-bg: rgba(255, 255, 255, 0.06);
+    --kv-tab-text: var(--text-secondary, #a1a1aa);
+    --kv-tab-text-active: var(--text-primary);
+    --kv-tab-border: var(--border-color);
+    --kv-tab-warning: #f59e0b;
+    --kv-tab-close: #f87171;
+    --kv-tab-add-bg: transparent;
+    --kv-tab-add-hover: rgba(255, 255, 255, 0.08);
+    --kv-toast-action: var(--accent-blue);
+    --kv-toast-error-accent: var(--accent-red, #f87171);
+    --kv-toast-info-accent: var(--accent-blue);
+}
+[data-theme="light"] {
+    --kv-tab-bg: rgba(0, 0, 0, 0.03);
+    --kv-tab-active-bg: var(--bg-card);
+    --kv-tab-hover-bg: rgba(0, 0, 0, 0.05);
+    --kv-tab-text: var(--text-secondary, #57534e);
+    --kv-tab-text-active: var(--text-primary);
+    --kv-tab-border: var(--border-color);
+    --kv-tab-warning: #d97706;
+    --kv-tab-close: #dc2626;
+    --kv-tab-add-bg: transparent;
+    --kv-tab-add-hover: rgba(0, 0, 0, 0.06);
+    --kv-toast-action: var(--accent-blue);
+    --kv-toast-error-accent: var(--accent-red, #dc2626);
+    --kv-toast-info-accent: var(--accent-blue);
+}
+
+.kv-cluster-tab-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 6px 10px 0 10px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--kv-tab-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-height: 38px;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+}
+.kv-cluster-tab-bar::-webkit-scrollbar { height: 4px; }
+.kv-cluster-tab-bar::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+.kv-cluster-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px 0 12px;
+    background: var(--kv-tab-bg);
+    color: var(--kv-tab-text);
+    border: 1px solid var(--kv-tab-border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+    max-width: 220px;
+    flex-shrink: 0;
+    opacity: 0.78;
+    white-space: nowrap;
+}
+.kv-cluster-tab:hover {
+    background: var(--kv-tab-hover-bg);
+    opacity: 1;
+}
+.kv-cluster-tab.active {
+    background: var(--kv-tab-active-bg);
+    color: var(--kv-tab-text-active);
+    opacity: 1;
+    /* 顶部 2px accent 高亮条 */
+    box-shadow: inset 0 2px 0 0 var(--accent-blue);
+    /* 与 Tab Bar 底部边线对齐——用 border-bottom 视觉上"打通" */
+    margin-bottom: -1px;
+    padding-bottom: 1px;
+    border-bottom: 1px solid var(--kv-tab-active-bg);
+    z-index: 1;
+}
+.kv-cluster-tab.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+}
+.kv-cluster-tab.drop-target-before::before,
+.kv-cluster-tab.drop-target-after::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--accent-blue);
+    border-radius: 1px;
+}
+.kv-cluster-tab.drop-target-before::before { left: -3px; }
+.kv-cluster-tab.drop-target-after::after { right: -3px; }
+
+.kv-cluster-tab .kv-tab-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+.kv-cluster-tab .kv-tab-warning {
+    color: var(--kv-tab-warning);
+    font-size: 14px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.kv-cluster-tab .kv-tab-close {
+    display: none;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin-left: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--kv-tab-text);
+    cursor: pointer;
+    line-height: 1;
+    font-size: 14px;
+    transition: background 120ms ease, color 120ms ease;
+}
+.kv-cluster-tab:hover .kv-tab-close,
+.kv-cluster-tab.active .kv-tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.kv-cluster-tab .kv-tab-close:hover {
+    background: var(--kv-tab-hover-bg);
+    color: var(--kv-tab-close);
+}
+
+.kv-cluster-tab.is-default .kv-tab-close { display: none !important; }
+/* Name is already "default" — no need for a suffix label. */
+
+.kv-tab-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin-left: 8px;
+    background: var(--kv-tab-add-bg);
+    color: var(--kv-tab-text);
+    border: 1px dashed var(--kv-tab-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    flex-shrink: 0;
+}
+.kv-tab-add-btn:hover:not(:disabled) {
+    background: var(--kv-tab-add-hover);
+    color: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+.kv-tab-add-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.kv-tab-add-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ============================================ */
+/* Toast extensions (.kv-toast.info / action btn) */
+/* ============================================ */
+.kv-toast.info {
+    border-color: var(--kv-toast-info-accent);
+    color: var(--kv-toast-info-accent);
+}
+.kv-toast .kv-toast-action {
+    margin-left: 12px;
+    padding: 2px 10px;
+    background: var(--kv-toast-action);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+    transition: filter 120ms ease;
+}
+.kv-toast .kv-toast-action:hover {
+    filter: brightness(1.1);
+}
+.kv-toast.has-action {
+    /* 含 action 时整体允许 pointer，让按钮可点 */
+    pointer-events: auto;
+}
+
+/* ============================================ */
+/* Modal Dialog (Add Tab / Close Confirm)         */
+/* ============================================ */
+.kv-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+    backdrop-filter: blur(2px);
+}
+[data-theme="light"] .kv-modal-overlay {
+    background: rgba(0, 0, 0, 0.35);
+}
+.kv-modal {
+    width: 480px;
+    max-width: 90vw;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    animation: kvModalIn 180ms ease-out;
+}
+.kv-modal-sm { width: 420px; }
+@keyframes kvModalIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.kv-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 12px 18px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 15px;
+    font-weight: 600;
+}
+.kv-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 120ms ease;
+}
+.kv-modal-close:hover { color: var(--text-primary); }
+.kv-modal-body {
+    padding: 16px 18px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.kv-modal-body p { margin: 0 0 12px 0; line-height: 1.6; font-size: 13px; }
+.kv-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px 14px 18px;
+    border-top: 1px solid var(--border-color);
+}
+.kv-form-row {
+    margin-bottom: 12px;
+}
+.kv-form-row label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-secondary, var(--text-muted));
+}
+.kv-form-row input[type="text"],
+.kv-form-row input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px;
+    background: var(--bg-card-hover, rgba(255,255,255,0.04));
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    transition: border-color 120ms ease;
+}
+.kv-form-row input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+.kv-required { color: var(--accent-red, #f87171); margin-left: 2px; }
+.kv-form-hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--accent-red, #f87171);
+}
+.kv-form-warn {
+    margin-top: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--kv-tab-warning);
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid var(--kv-tab-warning);
+    border-radius: 4px;
+}
+.kv-form-error {
+    margin-top: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--accent-red, #f87171);
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid var(--accent-red, #f87171);
+    border-radius: 4px;
+    line-height: 1.5;
+}
+.kv-form-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+.kv-form-checkbox input { cursor: pointer; }
+
+.kv-btn {
+    padding: 7px 18px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: filter 120ms ease, background 120ms ease, color 120ms ease;
+}
+.kv-btn-secondary {
+    background: transparent;
+    color: var(--text-secondary, var(--text-muted));
+    border-color: var(--border-color);
+}
+.kv-btn-secondary:hover {
+    background: var(--kv-tab-hover-bg);
+    color: var(--text-primary);
+}
+.kv-btn-primary {
+    background: var(--accent-blue);
+    color: #fff;
+    border-color: var(--accent-blue);
+}
+.kv-btn-primary:hover { filter: brightness(1.08); }
+.kv-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+.kv-btn-danger {
+    background: var(--accent-red, #ef4444);
+    color: #fff;
+    border-color: var(--accent-red, #ef4444);
+}
+.kv-btn-danger:hover { filter: brightness(1.08); }

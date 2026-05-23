@@ -89,6 +89,7 @@ into your existing Grafana instead.
 - **Multi-member cluster** — Auto-discovers members via official Go SDK with concurrent collection.
 - **Multi-endpoint failover** — Comma-separated endpoints with global health management and auto-recovery.
 - **KV Tree management** — Browse, CRUD, and search keys in a tree/list view, supports etcd v3 & v2.
+- **KV multi-cluster tabs** — Add up to 10 remote etcd clusters per user, browser-style draggable tabs, AES-256-GCM encrypted credentials, background liveness probe with ⚠️ on outage. Per-user isolation; default cluster is non-closable.
 - **Ops panel** — Defragment, Snapshot, Alarms, Move Leader, HashKV, Compact, Audit Log with CSV export.
 - **80+ metrics, 25 charts** — Raft, disk I/O, MVCC, Lease, network, gRPC, Go runtime.
 - **Local admin login** — Independent of etcd auth; bcrypt, lockout, forced first-time password change.
@@ -195,7 +196,8 @@ Full reference (every option, every default, every TLS field) →
 │  │  Health   │   │ User     │◀──│  /api/user/*           │   │
 │  │  Manager  │   │ Prefs    │   │  /api/kv/v3/*          │   │
 │  │ (15s chk) │   │ (JSON)   │   │  /api/kv/v2/*          │   │
-│  └─────┬─────┘   └──────────┘   │  /api/ops/*            │   │
+│  └─────┬─────┘   └──────────┘   │  /api/kv/tabs/*        │   │
+│        │                         │  /api/ops/*            │   │
 │        │                         └──────────┬─────────────┘   │
 │        │                                     │                │
 │  ┌─────▼───────┐   ┌──────────┐   ┌────────▼──────────────┐ │

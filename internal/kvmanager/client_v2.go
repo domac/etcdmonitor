@@ -2,6 +2,7 @@ package kvmanager
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"sort"
@@ -11,7 +12,7 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
-	"etcdmonitor/internal/tls"
+	etcdtls "etcdmonitor/internal/tls"
 
 	clientv2 "go.etcd.io/etcd/client/v2"
 )
@@ -24,9 +25,12 @@ type ClientV2 struct {
 	healthMgr *health.Manager
 	separator string
 	available bool // v2 API 是否可用
+
+	// override 非 nil 时不持有 keysAPI；每次调用按 override 临时构造（per-Tab）
+	override *connOverride
 }
 
-// NewClientV2 创建 v2 客户端实例
+// NewClientV2 创建 v2 客户端实例（默认 Tab 行为，持有长 keysAPI）
 func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, error) {
 	c := &ClientV2{
 		cfg:       cfg,
@@ -36,16 +40,12 @@ func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, erro
 	}
 
 	// 加载 TLS 配置并应用到 HTTP Transport
-	tlsCfg, err := tls.LoadClientTLSConfig(cfg)
+	tlsCfg, err := etcdtls.LoadClientTLSConfig(cfg)
 	if err != nil {
 		logger.Errorf("[KVManager] Failed to load TLS configuration: %v", err)
 	}
 
-	// 创建自定义 HTTP Transport，支持 TLS
-	transport := &http.Transport{
-		TLSClientConfig: tlsCfg,
-		// 保留 HTTP/1.1 连接使用默认的超时和连接池设置
-	}
+	transport := newV2Transport(tlsCfg)
 
 	etcdCfg := clientv2.Config{
 		Endpoints:               healthMgr.HealthyEndpoints(),
@@ -71,6 +71,59 @@ func NewClientV2(cfg *config.Config, healthMgr *health.Manager) (*ClientV2, erro
 	return c, nil
 }
 
+// WithOverride 返回一个使用 per-Tab 凭据 / endpoints / TLS 的 ClientV2 副本。
+//
+// 副本不预构造 keysAPI——每次方法调用临时建 client + keysAPI（per-request）。
+// 默认 Tab 与 per-Tab Tab 共用一个 ClientV2 类型，调用方无需感知差异。
+func (c *ClientV2) WithOverride(endpoints []string, username, password string, tlsCfg *tls.Config) *ClientV2 {
+	cp := &ClientV2{
+		cfg:       c.cfg,
+		healthMgr: c.healthMgr,
+		separator: c.separator,
+		available: true, // override 默认认为可达；不可达时方法内部 Connect 会探测
+		override: &connOverride{
+			Endpoints: endpoints,
+			Username:  username,
+			Password:  password,
+			TLS:       tlsCfg,
+		},
+	}
+	return cp
+}
+
+// keysClient 取 keysAPI——默认 Tab 用预构造的，per-Tab 临时构造。
+func (c *ClientV2) keysClient() (clientv2.KeysAPI, error) {
+	if c.override == nil {
+		if !c.available || c.keysAPI == nil {
+			return nil, fmt.Errorf("etcd v2 API is not available")
+		}
+		return c.keysAPI, nil
+	}
+
+	transport := newV2Transport(c.override.TLS)
+	etcdCfg := clientv2.Config{
+		Endpoints:               c.override.Endpoints,
+		Transport:               transport,
+		HeaderTimeoutPerRequest: time.Duration(c.cfg.KVManager.ConnectTimeout) * time.Second,
+	}
+	if c.override.Username != "" {
+		etcdCfg.Username = c.override.Username
+		etcdCfg.Password = c.override.Password
+	}
+	cli, err := clientv2.New(etcdCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create v2 client: %w", err)
+	}
+	return clientv2.NewKeysAPI(cli), nil
+}
+
+// newV2Transport 构造带 TLS 的 HTTP Transport。
+func newV2Transport(tlsCfg *tls.Config) *http.Transport {
+	return &http.Transport{
+		TLSClientConfig: tlsCfg,
+	}
+}
+
 // IsAvailable 返回 v2 API 是否可用
 func (c *ClientV2) IsAvailable() bool {
 	return c.available
@@ -83,17 +136,20 @@ func (c *ClientV2) GetSeparator() string {
 
 // Connect 获取集群连接信息并检测 v2 是否可用
 func (c *ClientV2) Connect() (*ConnectInfo, error) {
-	if !c.available {
-		return nil, fmt.Errorf("etcd v2 API is not available (requires --enable-v2=true)")
+	api, err := c.keysClient()
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
 	defer cancel()
 
 	// 尝试获取根节点来验证 v2 API 可用
-	_, err := c.keysAPI.Get(ctx, c.separator, &clientv2.GetOptions{Recursive: false})
+	_, err = api.Get(ctx, c.separator, &clientv2.GetOptions{Recursive: false})
 	if err != nil {
-		c.available = false
+		if c.override == nil {
+			c.available = false
+		}
 		return nil, fmt.Errorf("etcd v2 API is not available: %w", err)
 	}
 
@@ -108,14 +164,15 @@ func (c *ClientV2) Connect() (*ConnectInfo, error) {
 
 // Get 获取单个 key 的值
 func (c *ClientV2) Get(key string) (*Node, error) {
-	if !c.available {
-		return nil, fmt.Errorf("etcd v2 API is not available")
+	api, err := c.keysClient()
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
 	defer cancel()
 
-	resp, err := c.keysAPI.Get(ctx, key, nil)
+	resp, err := api.Get(ctx, key, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -125,14 +182,15 @@ func (c *ClientV2) Get(key string) (*Node, error) {
 
 // GetPath 获取指定路径下的子节点（树结构）
 func (c *ClientV2) GetPath(key string) (*Node, error) {
-	if !c.available {
-		return nil, fmt.Errorf("etcd v2 API is not available")
+	api, err := c.keysClient()
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
 	defer cancel()
 
-	resp, err := c.keysAPI.Get(ctx, key, &clientv2.GetOptions{
+	resp, err := api.Get(ctx, key, &clientv2.GetOptions{
 		Recursive: true,
 		Sort:      true,
 	})
@@ -172,8 +230,9 @@ func stripValues(node *Node) {
 
 // Put 创建或更新 key
 func (c *ClientV2) Put(key, value string, ttl int64, dir bool) (*Node, error) {
-	if !c.available {
-		return nil, fmt.Errorf("etcd v2 API is not available")
+	api, err := c.keysClient()
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
@@ -186,12 +245,11 @@ func (c *ClientV2) Put(key, value string, ttl int64, dir bool) (*Node, error) {
 	opts.Dir = dir
 
 	var resp *clientv2.Response
-	var err error
 
 	if dir {
-		resp, err = c.keysAPI.Set(ctx, key, "", opts)
+		resp, err = api.Set(ctx, key, "", opts)
 	} else {
-		resp, err = c.keysAPI.Set(ctx, key, value, opts)
+		resp, err = api.Set(ctx, key, value, opts)
 	}
 	if err != nil {
 		return nil, err
@@ -202,8 +260,9 @@ func (c *ClientV2) Put(key, value string, ttl int64, dir bool) (*Node, error) {
 
 // Delete 删除 key 或目录
 func (c *ClientV2) Delete(key string, dir bool) error {
-	if !c.available {
-		return fmt.Errorf("etcd v2 API is not available")
+	api, err := c.keysClient()
+	if err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
@@ -214,7 +273,7 @@ func (c *ClientV2) Delete(key string, dir bool) error {
 		Dir:       dir,
 	}
 
-	_, err := c.keysAPI.Delete(ctx, key, opts)
+	_, err = api.Delete(ctx, key, opts)
 	return err
 }
 

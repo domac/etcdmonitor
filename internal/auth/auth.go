@@ -13,6 +13,7 @@ import (
 // Session 表示一个活跃的用户会话
 type Session struct {
 	Token     string
+	UserID    int64 // users.id；登录时填充，用于按 user_id 隔离 KV Tab 等资源
 	Username  string
 	CreatedAt time.Time
 	ExpiresAt time.Time
@@ -51,7 +52,10 @@ func NewMemorySessionStore() *MemorySessionStore {
 }
 
 // Create 创建新会话
-func (s *MemorySessionStore) Create(username string, timeout time.Duration) (*Session, error) {
+//
+// userID 必须 > 0（来自 users.id）；某些场景（旧测试 / 兼容）可传 0，
+// 但相关功能（如 KV Tab 隔离）会拒绝该 session 访问。
+func (s *MemorySessionStore) Create(userID int64, username string, timeout time.Duration) (*Session, error) {
 	token, err := GenerateToken()
 	if err != nil {
 		return nil, err
@@ -59,6 +63,7 @@ func (s *MemorySessionStore) Create(username string, timeout time.Duration) (*Se
 
 	session := &Session{
 		Token:     token,
+		UserID:    userID,
 		Username:  username,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(timeout),

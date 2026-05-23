@@ -46,7 +46,7 @@ func TestMemorySessionStoreCreate(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	session, err := store.Create("testuser", 1*time.Hour)
+	session, err := store.Create(1, "testuser", 1*time.Hour)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestMemorySessionStoreGet(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	session, _ := store.Create("testuser", 1*time.Hour)
+	session, _ := store.Create(1, "testuser", 1*time.Hour)
 
 	got := store.Get(session.Token)
 	if got == nil {
@@ -85,7 +85,7 @@ func TestMemorySessionStoreGetExpired(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	session, _ := store.Create("testuser", 1*time.Millisecond)
+	session, _ := store.Create(1, "testuser", 1*time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
 
 	got := store.Get(session.Token)
@@ -98,7 +98,7 @@ func TestMemorySessionStoreDelete(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	session, _ := store.Create("testuser", 1*time.Hour)
+	session, _ := store.Create(1, "testuser", 1*time.Hour)
 	store.Delete(session.Token)
 
 	if store.Get(session.Token) != nil {
@@ -110,7 +110,7 @@ func TestMemorySessionStoreIsValid(t *testing.T) {
 	store := NewMemorySessionStore()
 	defer store.Stop()
 
-	session, _ := store.Create("testuser", 1*time.Hour)
+	session, _ := store.Create(1, "testuser", 1*time.Hour)
 
 	if !store.IsValid(session.Token) {
 		t.Error("expected valid session")
@@ -129,7 +129,7 @@ func TestMemorySessionStoreConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := store.Create("user", 1*time.Hour)
+			s, err := store.Create(1, "user", 1*time.Hour)
 			if err != nil {
 				t.Errorf("concurrent Create failed: %v", err)
 				return
@@ -147,8 +147,8 @@ func TestMemorySessionStoreCleanup(t *testing.T) {
 	defer store.Stop()
 
 	// Create expired and valid sessions
-	store.Create("expired", 1*time.Millisecond)
-	valid, _ := store.Create("valid", 1*time.Hour)
+	store.Create(1, "expired", 1*time.Millisecond)
+	valid, _ := store.Create(2, "valid", 1*time.Hour)
 	time.Sleep(5 * time.Millisecond)
 
 	store.cleanup()

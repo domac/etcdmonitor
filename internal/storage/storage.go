@@ -26,6 +26,14 @@ type Storage struct {
 	cfg *config.Config
 }
 
+// DB 返回底层 *sql.DB 句柄。
+//
+// 谨慎使用——主要供子包（如 internal/kvmanager/tabs）共享同一连接池，
+// 避免多实例并发写引发的锁冲突；不应被业务逻辑直接调用。
+func (s *Storage) DB() *sql.DB {
+	return s.db
+}
+
 // New 创建并初始化存储
 func New(cfg *config.Config) (*Storage, error) {
 	dbDir := filepath.Dir(cfg.Storage.DBPath)
@@ -124,6 +132,24 @@ func (s *Storage) initTables() error {
 			updated_at INTEGER NOT NULL
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+		CREATE TABLE IF NOT EXISTS kv_cluster_tabs (
+			id TEXT PRIMARY KEY,
+			created_by_user_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			endpoint TEXT NOT NULL,
+			username TEXT NOT NULL DEFAULT '',
+			password_cipher BLOB NOT NULL DEFAULT x'',
+			sort_order INTEGER NOT NULL,
+			last_status TEXT NOT NULL DEFAULT 'unknown',
+			last_error TEXT NOT NULL DEFAULT '',
+			last_checked_at INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_kv_cluster_tabs_user_sort
+			ON kv_cluster_tabs(created_by_user_id, sort_order);
+		CREATE INDEX IF NOT EXISTS idx_kv_cluster_tabs_user
+			ON kv_cluster_tabs(created_by_user_id);
 	`)
 	return err
 }

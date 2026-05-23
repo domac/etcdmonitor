@@ -80,7 +80,7 @@ func TestAuthMiddleware_RequiresAuth_NoCookie(t *testing.T) {
 func TestAuthMiddleware_RequiresAuth_ValidCookie(t *testing.T) {
 	a, store := newTestAPI(true)
 
-	session, _ := store.Create("testuser", 1*time.Hour)
+	session, _ := store.Create(1, "testuser", 1*time.Hour)
 
 	router := gin.New()
 	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
@@ -165,7 +165,7 @@ func TestHandleAuthStatus_AuthRequired_NotAuthenticated(t *testing.T) {
 func TestHandleAuthStatus_AuthRequired_Authenticated(t *testing.T) {
 	a, store := newTestAPI(true)
 
-	session, _ := store.Create("root", 1*time.Hour)
+	session, _ := store.Create(1, "root", 1*time.Hour)
 
 	router := gin.New()
 	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
@@ -192,7 +192,7 @@ func TestHandleAuthStatus_AuthRequired_Authenticated(t *testing.T) {
 func TestHandleLogout(t *testing.T) {
 	a, store := newTestAPI(true)
 
-	session, _ := store.Create("root", 1*time.Hour)
+	session, _ := store.Create(1, "root", 1*time.Hour)
 
 	router := gin.New()
 	router.POST("/api/auth/logout", a.authHandler.HandleLogout)
@@ -245,7 +245,7 @@ func TestSessionExpiry_MiddlewareRejects(t *testing.T) {
 	a, store := newTestAPI(true)
 
 	// Create session with very short timeout
-	session, _ := store.Create("testuser", 1*time.Millisecond)
+	session, _ := store.Create(1, "testuser", 1*time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
 
 	router := gin.New()
