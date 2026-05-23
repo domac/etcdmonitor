@@ -1660,14 +1660,19 @@ async function kvActivateTab(tabID) {
 }
 
 function kvSyncToggleControls() {
-    // V3/V2
+    // V3/V2 — slider 由 .right class 控制位置（与 kvSwitchProtocol 保持一致）。
+    // 早期版本用过 style.transform，但 inline 样式无法替换/清除 CSS 类的 transform，
+    // 导致切 Tab 时蓝块卡在错位上。
     var protoV3 = document.getElementById('kvTabV3');
     var protoV2 = document.getElementById('kvTabV2');
     var protoSlider = document.getElementById('kvProtoSlider');
     if (protoV3 && protoV2) {
         protoV3.classList.toggle('active', kvState.protocol === 'v3');
         protoV2.classList.toggle('active', kvState.protocol === 'v2');
-        if (protoSlider) protoSlider.style.transform = kvState.protocol === 'v2' ? 'translateX(100%)' : 'translateX(0)';
+        if (protoSlider) {
+            protoSlider.style.transform = ''; // 清掉历史 inline 残留
+            protoSlider.classList.toggle('right', kvState.protocol === 'v2');
+        }
     }
     // Tree/List
     var viewT = document.getElementById('kvViewTree');
@@ -1676,7 +1681,10 @@ function kvSyncToggleControls() {
     if (viewT && viewL) {
         viewT.classList.toggle('active', kvState.treeMode === 'tree');
         viewL.classList.toggle('active', kvState.treeMode === 'list');
-        if (viewSlider) viewSlider.style.transform = kvState.treeMode === 'list' ? 'translateX(100%)' : 'translateX(0)';
+        if (viewSlider) {
+            viewSlider.style.transform = ''; // 清掉历史 inline 残留
+            viewSlider.classList.toggle('right', kvState.treeMode === 'list');
+        }
     }
 }
 
