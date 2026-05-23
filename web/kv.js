@@ -225,12 +225,16 @@ async function kvLoadTree() {
 
     try {
         var resp = await kvFetch(kvApiBase() + '/keys');
+        if (resp === null) return; // 401 已跳转
         if (resp.error) {
             kvShowTreeError(resp.error);
+            if (typeof kvOnTabRequestError === 'function') kvOnTabRequestError(resp);
             return;
         }
         kvState.treeData = resp.node;
         kvState.cache[kvState.protocol].treeData = resp.node;
+        // 拿到数据 → 当前 Tab 一定健康，立刻摘掉可能的 ⚠️
+        if (typeof kvOnTabRequestSuccess === 'function') kvOnTabRequestSuccess();
         kvRenderTree();
     } catch (e) {
         kvShowTreeError('Failed to load: ' + e.message);
@@ -1692,6 +1696,8 @@ function kvRefreshInfoBar() {
             if (v) v.textContent = resp.version || '-';
             if (l) l.textContent = resp.name || '-';
             if (s) s.textContent = resp.size_str || '-';
+            // connect 成功也算活跃，摘掉可能的 ⚠️
+            if (typeof kvOnTabRequestSuccess === 'function') kvOnTabRequestSuccess();
         } else {
             // 显示占位
             var v2 = document.getElementById('kvVersion');
@@ -1810,6 +1816,26 @@ function kvOnTabRequestError(resp) {
     } else if (resp.code === 'KV_TAB_NOT_FOUND') {
         // tab_id 不在 DB 里——可能其他会话删掉了；重新拉列表
         kvLoadTabs();
+    }
+}
+
+// 业务请求成功路径上：立即把当前 Tab 的 lastStatus 同步为 ok 并刷新 ⚠️。
+//
+// 后端 markTabOK 已经把 DB 写为 "ok"，但前端 kvSession.tabs[id].lastStatus
+// 仍是上一次 /api/kv/tabs poll 的值（最长滞后 60 秒）。这里就地纠正，
+// 让用户在第一次拿到数据时立刻看到 ⚠️ 消失。
+function kvOnTabRequestSuccess() {
+    var tabID = kvCurrentTabID();
+    if (!tabID || tabID === 'default') return;
+    var tab = kvSession.tabs[tabID];
+    if (!tab) return;
+    if (tab.lastStatus === 'error' || tab.lastError) {
+        tab.lastStatus = 'ok';
+        tab.lastError = '';
+        // 同时清掉 toast 节流，让真的下次失败能立刻提示
+        delete kvSession.toastThrottle[tabID + ':KV_TAB_UNREACHABLE'];
+        delete kvSession.toastThrottle[tabID + ':KV_TAB_AUTH_FAILED'];
+        kvRenderTabBar();
     }
 }
 
