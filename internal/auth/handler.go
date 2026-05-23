@@ -200,7 +200,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	if timeout <= 0 {
 		timeout = 1 * time.Hour
 	}
-	session, err := h.sessionStore.Create(req.Username, timeout)
+	session, err := h.sessionStore.Create(user.ID, req.Username, timeout)
 	if err != nil {
 		elapsed := time.Since(start).Milliseconds()
 		logger.Errorf("[Auth] Session creation failed: %v", err)

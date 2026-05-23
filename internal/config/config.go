@@ -52,10 +52,11 @@ type Config struct {
 	} `yaml:"log"`
 
 	KVManager struct {
-		Separator      string `yaml:"separator"`
-		ConnectTimeout int    `yaml:"connect_timeout"`
-		RequestTimeout int    `yaml:"request_timeout"`
-		MaxValueSize   int    `yaml:"max_value_size"`
+		Separator       string `yaml:"separator"`
+		ConnectTimeout  int    `yaml:"connect_timeout"`
+		RequestTimeout  int    `yaml:"request_timeout"`
+		MaxValueSize    int    `yaml:"max_value_size"`
+		TabPingInterval int    `yaml:"tab_ping_interval"`
 	} `yaml:"kv_manager"`
 
 	Ops struct {
@@ -157,6 +158,15 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.KVManager.MaxValueSize <= 0 {
 		cfg.KVManager.MaxValueSize = 2 * 1024 * 1024 // 2MB
+	}
+	// TabPingInterval: 默认 30 秒，最小 10 秒；越界打印 WARN 并夹紧
+	if cfg.KVManager.TabPingInterval == 0 {
+		cfg.KVManager.TabPingInterval = 30
+	} else if cfg.KVManager.TabPingInterval < 10 {
+		fmt.Fprintf(os.Stderr,
+			"[Config] WARN: kv_manager.tab_ping_interval=%d 小于最小值 10 秒，已强制为 10\n",
+			cfg.KVManager.TabPingInterval)
+		cfg.KVManager.TabPingInterval = 10
 	}
 
 	// Ops 默认值

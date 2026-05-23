@@ -20,6 +20,7 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/kvmanager"
+	"etcdmonitor/internal/kvmanager/tabs"
 	"etcdmonitor/internal/logger"
 	"etcdmonitor/internal/ops"
 	"etcdmonitor/internal/prefs"
@@ -171,6 +172,30 @@ func runServer() {
 	if err != nil {
 		logger.Warnf("KV manager init failed (KV management will be unavailable): %v", err)
 	} else {
+		// 多集群 Tab 支持：初始化 tabs 包（KEK / Repo / Manager / PingScheduler）
+		dataDir := filepath.Dir(cfg.Storage.DBPath)
+		kekMgr, kekErr := tabs.NewFileKeyManager(dataDir)
+		if kekErr != nil {
+			logger.Warnf("KV multi-cluster tabs disabled (KEK init failed): %v", kekErr)
+		} else {
+			tabsRepo := tabs.NewSQLiteRepo(store.DB())
+			tabsMgr := tabs.NewManager(tabsRepo, kekMgr, cfg, healthMgr)
+			tabsHandler := tabs.NewTabHandler(tabsMgr, store, sessionStore, logger.L(), cfg)
+			tabsHandler.RegisterRoutes(protected)
+			kvHandler.SetTabsManager(tabsMgr, tabsHandler)
+
+			// 启动后台探活 PingScheduler
+			pingCtx, pingCancel := context.WithCancel(context.Background())
+			pingInterval := time.Duration(cfg.KVManager.TabPingInterval) * time.Second
+			scheduler := tabs.NewPingScheduler(tabsMgr, pingInterval)
+			scheduler.Start(pingCtx)
+			defer func() {
+				pingCancel()
+				scheduler.Stop()
+			}()
+			logger.Infof("KV multi-cluster tabs initialized (ping_interval=%v)", pingInterval)
+		}
+
 		kvHandler.RegisterRoutes(protected)
 		defer kvHandler.Close()
 		logger.Info("KV manager initialized with audit logging")

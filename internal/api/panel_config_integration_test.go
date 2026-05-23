@@ -29,7 +29,7 @@ func newTestAPIWithPrefs(t *testing.T) (*API, *prefs.FileStore, string) {
 // 返回 (router, sessionToken)。
 func newAuthedRouter(t *testing.T, a *API, username string) (*gin.Engine, string) {
 	t.Helper()
-	session, _ := a.sessionStore.Create(username, 1*time.Hour)
+	session, _ := a.sessionStore.Create(1, username, 1*time.Hour)
 	router := gin.New()
 	protected := router.Group("/api")
 	protected.Use(a.authMiddleware())

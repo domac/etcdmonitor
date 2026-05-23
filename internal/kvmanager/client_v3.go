@@ -2,6 +2,7 @@ package kvmanager
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -9,16 +10,29 @@ import (
 	"etcdmonitor/internal/config"
 	"etcdmonitor/internal/health"
 	"etcdmonitor/internal/logger"
-	"etcdmonitor/internal/tls"
+	etcdtls "etcdmonitor/internal/tls"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
+
+// connOverride 是 per-Tab 连接覆盖配置；nil 表示走 cfg.Etcd（默认 Tab）。
+//
+// 字段与 tabs.ConnectionConfig 同义，但定义在本包以避免 kvmanager → tabs 的反向 import。
+type connOverride struct {
+	Endpoints []string
+	Username  string
+	Password  string
+	TLS       *tls.Config
+}
 
 // ClientV3 封装 etcd v3 客户端操作（per-request 模式，每次操作创建临时连接）
 type ClientV3 struct {
 	cfg       *config.Config
 	healthMgr *health.Manager
 	separator string
+
+	// override 非 nil 时所有操作走该配置（per-Tab）；nil 走 cfg.Etcd（默认 Tab）。
+	override *connOverride
 }
 
 // NewClientV3 创建 v3 客户端实例
@@ -30,13 +44,46 @@ func NewClientV3(cfg *config.Config, healthMgr *health.Manager) (*ClientV3, erro
 	}, nil
 }
 
+// WithOverride 返回一个共享底层配置但使用给定 override 的 ClientV3 副本。
+//
+// 所有字段共享（值复制）；override 是引用——但本类型不会修改 override 字段，
+// 因此并发使用安全。
+func (c *ClientV3) WithOverride(endpoints []string, username, password string, tlsCfg *tls.Config) *ClientV3 {
+	cp := *c
+	cp.override = &connOverride{
+		Endpoints: endpoints,
+		Username:  username,
+		Password:  password,
+		TLS:       tlsCfg,
+	}
+	return &cp
+}
+
 // Close per-request 模式下无需全局关闭
 func (c *ClientV3) Close() error {
 	return nil
 }
 
-// newClient 创建临时 etcd 客户端，调用方负责 defer cli.Close()
+// newClient 创建临时 etcd 客户端，调用方负责 defer cli.Close()。
+//
+// 当 c.override == nil 时使用 cfg.Etcd 与 healthMgr.HealthyEndpoints()（默认 Tab）；
+// 否则使用 override 中的 endpoints / username / password / TLS（per-Tab）。
 func (c *ClientV3) newClient() (*clientv3.Client, error) {
+	if c.override != nil {
+		etcdCfg := clientv3.Config{
+			Endpoints:   c.override.Endpoints,
+			DialTimeout: time.Duration(c.cfg.KVManager.ConnectTimeout) * time.Second,
+		}
+		if c.override.Username != "" {
+			etcdCfg.Username = c.override.Username
+			etcdCfg.Password = c.override.Password
+		}
+		if c.override.TLS != nil {
+			etcdCfg.TLS = c.override.TLS
+		}
+		return clientv3.New(etcdCfg)
+	}
+
 	etcdCfg := clientv3.Config{
 		Endpoints:   c.healthMgr.HealthyEndpoints(),
 		DialTimeout: time.Duration(c.cfg.KVManager.ConnectTimeout) * time.Second,
@@ -46,8 +93,8 @@ func (c *ClientV3) newClient() (*clientv3.Client, error) {
 		etcdCfg.Password = c.cfg.Etcd.Password
 	}
 
-	// 应用 TLS 配置
-	tlsCfg, err := tls.LoadClientTLSConfig(c.cfg)
+	// 应用 TLS 配置（默认 Tab 走完整 mTLS / CA / SNI 路径）
+	tlsCfg, err := etcdtls.LoadClientTLSConfig(c.cfg)
 	if err != nil {
 		logger.Errorf("[KVManager] Failed to load TLS configuration: %v", err)
 	} else if tlsCfg != nil {
@@ -73,10 +120,21 @@ func (c *ClientV3) Connect() (*ConnectInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.requestTimeout())
 	defer cancel()
 
-	// 通过健康管理器获取 Status
-	statusResp, err := c.healthMgr.StatusFromHealthy(cli)
-	if err != nil {
-		return nil, fmt.Errorf("get status from healthy endpoints: %w", err)
+	// 默认 Tab 用健康管理器；per-Tab override 直接用 override.Endpoints[0]
+	var statusResp *clientv3.StatusResponse
+	if c.override != nil {
+		if len(c.override.Endpoints) == 0 {
+			return nil, fmt.Errorf("no endpoints in override")
+		}
+		statusResp, err = cli.Status(ctx, c.override.Endpoints[0])
+		if err != nil {
+			return nil, fmt.Errorf("status from %s: %w", c.override.Endpoints[0], err)
+		}
+	} else {
+		statusResp, err = c.healthMgr.StatusFromHealthy(cli)
+		if err != nil {
+			return nil, fmt.Errorf("get status from healthy endpoints: %w", err)
+		}
 	}
 
 	memberResp, err := cli.MemberList(ctx)

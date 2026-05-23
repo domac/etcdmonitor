@@ -460,13 +460,17 @@
         <span class="kv-info-item"><strong>DB Size:</strong> <span id="kvDBSize">-</span></span>
     </div>
 
-    <!-- KV Main Layout: Tree + Editor -->
+    <!-- KV Main Layout: Cluster Tabs (full width) + (Tree | Editor) -->
     <div class="kv-layout">
-        <!-- Left: Tree Panel -->
-        <div class="kv-tree-panel" id="kvTreePanel">
-            <!-- Toggle Bar -->
-            <div class="kv-tab-bar">
-                <!-- V2/V3 Protocol Toggle -->
+        <!-- Cluster Tab Bar — spans full width above tree + editor -->
+        <div class="kv-cluster-tab-bar" id="kvClusterTabBar" role="tablist" aria-label="KV Clusters"></div>
+        <!-- Inner Row: Tree Panel | Resize Handle | Editor Panel -->
+        <div class="kv-layout-row">
+            <!-- Left: Tree Panel -->
+            <div class="kv-tree-panel" id="kvTreePanel">
+                <!-- Toggle Bar -->
+                <div class="kv-tab-bar">
+                    <!-- V2/V3 Protocol Toggle -->
                 <div class="kv-toggle-group" id="kvProtoToggle">
                     <div class="kv-toggle-track">
                         <div class="kv-toggle-slider" id="kvProtoSlider"></div>
@@ -488,6 +492,10 @@
                         <button class="kv-toggle-option" id="kvViewList" onclick="kvSwitchTreeMode('list')">List</button>
                     </div>
                 </div>
+                <!-- Add Cluster Tab Button (multi-cluster only) -->
+                <button class="kv-tab-add-btn" id="kvAddTabBtn" onclick="kvOpenAddTabDialog()" title="添加远程 etcd 集群" aria-label="Add Cluster">
+                    <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
             </div>
             <!-- Tree Container -->
             <div class="kv-tree-container" id="kvTreeContainer">
@@ -529,8 +537,68 @@
                 <div id="kvEditor" style="display:none"></div>
             </div>
         </div>
+        </div><!-- /.kv-layout-row -->
     </div>
 </section>
+
+<!-- Add / Reconnect Cluster Tab Dialog (multi-cluster) -->
+<div class="kv-modal-overlay" id="kvAddTabDialog" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kvAddTabTitle">
+    <div class="kv-modal">
+        <div class="kv-modal-header">
+            <span id="kvAddTabTitle">添加远程 etcd 集群</span>
+            <button class="kv-modal-close" onclick="kvCloseAddTabDialog()" aria-label="Close">&times;</button>
+        </div>
+        <div class="kv-modal-body">
+            <div class="kv-form-row">
+                <label for="kvAddTabEndpoint">Endpoint <span class="kv-required">*</span></label>
+                <input type="text" id="kvAddTabEndpoint" placeholder="http://10.0.0.1:2379  或  https://etcd.prod:2379"
+                       oninput="kvOnAddTabEndpointInput()" onblur="kvOnAddTabEndpointBlur()">
+                <div class="kv-form-hint" id="kvAddTabSchemeHint" style="display:none"></div>
+                <div class="kv-form-warn" id="kvAddTabHttpsWarn" style="display:none">
+                    ⚠️ HTTPS 连接将不校验服务端证书（InsecureSkipVerify=true）
+                </div>
+            </div>
+            <div class="kv-form-row">
+                <label for="kvAddTabName">显示名</label>
+                <input type="text" id="kvAddTabName" placeholder="默认使用 endpoint 的 host">
+            </div>
+            <div class="kv-form-row">
+                <label for="kvAddTabUsername">用户名</label>
+                <input type="text" id="kvAddTabUsername" placeholder="可选——若 etcd 启用了 auth">
+            </div>
+            <div class="kv-form-row">
+                <label for="kvAddTabPassword">密码</label>
+                <input type="password" id="kvAddTabPassword" placeholder="可选；不在浏览器中明文存储——加密后落本地 DB" autocomplete="new-password">
+            </div>
+            <div class="kv-form-error" id="kvAddTabError" style="display:none"></div>
+        </div>
+        <div class="kv-modal-footer">
+            <button class="kv-btn kv-btn-secondary" onclick="kvCloseAddTabDialog()">取消</button>
+            <button class="kv-btn kv-btn-primary" id="kvAddTabSubmit" onclick="kvSubmitAddTab()">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- Close Cluster Tab Confirmation Dialog -->
+<div class="kv-modal-overlay" id="kvCloseConfirmDialog" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kvCloseConfirmTitle">
+    <div class="kv-modal kv-modal-sm">
+        <div class="kv-modal-header">
+            <span id="kvCloseConfirmTitle">关闭 Tab？</span>
+            <button class="kv-modal-close" onclick="kvCancelCloseTab()" aria-label="Close">&times;</button>
+        </div>
+        <div class="kv-modal-body">
+            <p id="kvCloseConfirmText">确定关闭此 Tab？此操作会从数据库删除该连接配置，下次登录将不再加载。</p>
+            <label class="kv-form-checkbox">
+                <input type="checkbox" id="kvCloseConfirmDontAsk">
+                <span>不再提示我（可以通过清除浏览器数据恢复）</span>
+            </label>
+        </div>
+        <div class="kv-modal-footer">
+            <button class="kv-btn kv-btn-secondary" onclick="kvCancelCloseTab()">取消</button>
+            <button class="kv-btn kv-btn-danger" onclick="kvConfirmCloseTab()">确定关闭</button>
+        </div>
+    </div>
+</div>
 
 <!-- Context Menu (for tree nodes) -->
 <div class="kv-context-menu" id="kvContextMenu" style="display:none">
