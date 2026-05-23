@@ -1350,7 +1350,7 @@ function kvShowToast(msg, type, options) {
         classes.push('has-action');
         var btn = document.createElement('button');
         btn.className = 'kv-toast-action';
-        btn.textContent = options.action.label || '操作';
+        btn.textContent = options.action.label || 'Action';
         btn.onclick = function() {
             try { options.action.onClick && options.action.onClick(); } catch(_) {}
             toast.classList.remove('show');
@@ -1584,7 +1584,7 @@ function kvBuildTabElement(tab) {
         close.className = 'kv-tab-close';
         close.innerHTML = '&times;';
         close.setAttribute('aria-label', 'Close tab');
-        close.title = '关闭该 Tab';
+        close.title = 'Close this tab';
         close.onclick = function(e) {
             e.stopPropagation();
             kvCloseTab(tab.id);
@@ -1614,10 +1614,10 @@ function kvUpdateAddBtnState() {
     var nonDefault = Math.max(0, kvSession.tabOrder.length - 1);
     if (nonDefault >= 10) {
         btn.disabled = true;
-        btn.title = '已达每用户 10 个上限';
+        btn.title = 'Per-user limit of 10 reached';
     } else {
         btn.disabled = false;
-        btn.title = '添加远程 etcd 集群';
+        btn.title = 'Add remote etcd cluster';
     }
 }
 
@@ -1812,12 +1812,12 @@ function kvShowTabErrorToast(tabID, errorCode) {
     var tab = kvSession.tabs[tabID];
     var name = (tab && tab.name) || tabID;
     var msg = (errorCode === 'KV_TAB_AUTH_FAILED')
-        ? '凭据已失效 "' + name + '"'
-        : '无法连接 "' + name + '"';
+        ? 'Credentials no longer valid for "' + name + '"'
+        : 'Cannot connect to "' + name + '"';
     kvShowToast(msg, 'error', {
         durationMs: 6000,
         action: {
-            label: '重新输入',
+            label: 'Re-enter',
             onClick: function() { kvOpenReconnectDialog(tabID); }
         }
     });
@@ -1874,7 +1874,7 @@ function kvOpenAddTabDialog() {
     document.getElementById('kvAddTabHttpsWarn').style.display = 'none';
     document.getElementById('kvAddTabError').style.display = 'none';
     document.getElementById('kvAddTabSubmit').disabled = false;
-    document.getElementById('kvAddTabSubmit').textContent = '确定';
+    document.getElementById('kvAddTabSubmit').textContent = 'OK';
     dlg.style.display = 'flex';
     setTimeout(function() {
         var ep = document.getElementById('kvAddTabEndpoint');
@@ -1907,7 +1907,7 @@ function kvOnAddTabEndpointInput() {
         hint.style.display = 'none';
         warn.style.display = '';
     } else {
-        hint.textContent = '仅支持 http:// 或 https:// 开头的地址';
+        hint.textContent = 'Only http:// or https:// endpoints are supported';
         hint.style.display = '';
         warn.style.display = 'none';
     }
@@ -1948,19 +1948,19 @@ async function kvSubmitAddTab() {
     errBox.style.display = 'none';
 
     if (!endpoint) {
-        errBox.textContent = 'Endpoint 不能为空';
+        errBox.textContent = 'Endpoint is required';
         errBox.style.display = '';
         return;
     }
     var lower = endpoint.toLowerCase();
     if (lower.indexOf('http://') !== 0 && lower.indexOf('https://') !== 0) {
-        errBox.textContent = '仅支持 http:// 或 https:// 开头的地址';
+        errBox.textContent = 'Only http:// or https:// endpoints are supported';
         errBox.style.display = '';
         return;
     }
 
     btn.disabled = true;
-    btn.textContent = '校验中...';
+    btn.textContent = 'Validating...';
 
     if (mode === 'reconnect') {
         await kvSubmitReconnect(dlg.dataset.tabId, endpoint, name, username, password, errBox, btn);
@@ -1978,13 +1978,13 @@ async function kvSubmitAddTab() {
         })
     });
     btn.disabled = false;
-    btn.textContent = '确定';
+    btn.textContent = 'OK';
     if (resp === null) return; // 401 已跳转
     if (resp.error || resp.code) {
         if (resp.code === 'KV_TAB_BELONGS_TO_DEFAULT') {
             // 友好 info 提示——不关对话框
             errBox.style.display = 'none';
-            kvShowToast(resp.message || ('该地址属于默认集群（' + (resp.matched_member_url || '') + '）'),
+            kvShowToast(resp.message || ('That endpoint belongs to the default cluster (' + (resp.matched_member_url || '') + ')'),
                 'info', { durationMs: 6000 });
             return;
         }
@@ -1993,7 +1993,7 @@ async function kvSubmitAddTab() {
         return;
     }
     if (resp.warning === 'degraded_member_check') {
-        if (!confirm('警告：默认集群当前不可达，无法准确比对成员。继续添加？')) {
+        if (!confirm('Warning: the default cluster is currently unreachable, so member-list comparison may be inaccurate. Continue adding?')) {
             return;
         }
     }
@@ -2003,7 +2003,7 @@ async function kvSubmitAddTab() {
     if (resp.tab && resp.tab.id) {
         kvActivateTab(resp.tab.id);
     }
-    kvShowToast('Tab 添加成功', 'success');
+    kvShowToast('Tab added successfully', 'success');
 }
 
 // === 重连对话框 ===
@@ -2014,7 +2014,7 @@ function kvOpenReconnectDialog(tabID) {
     var dlg = document.getElementById('kvAddTabDialog');
     dlg.dataset.mode = 'reconnect';
     dlg.dataset.tabId = tabID;
-    document.getElementById('kvAddTabTitle').textContent = '重新输入凭据：' + (tab.name || tabID);
+    document.getElementById('kvAddTabTitle').textContent = 'Re-enter credentials: ' + (tab.name || tabID);
     document.getElementById('kvAddTabEndpoint').value = tab.endpoint || '';
     document.getElementById('kvAddTabName').value = tab.name || '';
     document.getElementById('kvAddTabUsername').value = tab.username || '';
@@ -2032,8 +2032,8 @@ async function kvSubmitReconnect(tabID, endpoint, name, username, password, errB
     if (testResp === null) return;
     if (testResp.status !== 'ok') {
         btn.disabled = false;
-        btn.textContent = '确定';
-        errBox.textContent = '连接测试失败：' + (testResp.error || testResp.status);
+        btn.textContent = 'OK';
+        errBox.textContent = 'Connection test failed: ' + (testResp.error || testResp.status);
         errBox.style.display = '';
         return;
     }
@@ -2047,7 +2047,7 @@ async function kvSubmitReconnect(tabID, endpoint, name, username, password, errB
         body: JSON.stringify(patchBody)
     });
     btn.disabled = false;
-    btn.textContent = '确定';
+    btn.textContent = 'OK';
     if (patchResp === null) return;
     if (patchResp.error || patchResp.code) {
         errBox.textContent = patchResp.message || patchResp.error || patchResp.code;
@@ -2065,7 +2065,7 @@ async function kvSubmitReconnect(tabID, endpoint, name, username, password, errB
         delete kvSession.toastThrottle[tabID + ':KV_TAB_AUTH_FAILED'];
     }
     await kvLoadTabs();
-    kvShowToast('凭据已更新，正在重试...', 'info');
+    kvShowToast('Credentials updated, retrying...', 'info');
     // 自动重试上次失败的请求
     if (kvSession.lastFailedRequest && kvSession.lastFailedRequest.tabID === tabID) {
         var retry = kvSession.lastFailedRequest.retry;
@@ -2097,8 +2097,8 @@ function kvCloseTab(tabID) {
     var dlg = document.getElementById('kvCloseConfirmDialog');
     var text = document.getElementById('kvCloseConfirmText');
     var ck = document.getElementById('kvCloseConfirmDontAsk');
-    if (text) text.textContent = '确定关闭 Tab "' + (tab.name || tabID) +
-        '"？此操作会从数据库删除该连接配置，下次登录将不再加载。';
+    if (text) text.textContent = 'Close tab "' + (tab.name || tabID) +
+        '"? Its connection config will be removed from the database and won\'t load on next login.';
     if (ck) ck.checked = false;
     if (dlg) dlg.style.display = 'flex';
 }
@@ -2115,7 +2115,7 @@ async function kvConfirmCloseTab() {
     if (ck && ck.checked) {
         try {
             localStorage.setItem('kv_close_tab_confirm', 'never');
-            kvShowToast('已开启免确认关闭。如需恢复，请清除浏览器数据', 'info', { durationMs: 5000 });
+            kvShowToast('Skip-confirm enabled. Clear browser data to restore.', 'info', { durationMs: 5000 });
         } catch (_) {}
     }
     var dlg = document.getElementById('kvCloseConfirmDialog');
@@ -2221,7 +2221,7 @@ async function kvSubmitOrder() {
     });
     if (resp === null) return;
     if (resp.error || resp.code) {
-        kvShowToast('排序保存失败：' + (resp.message || resp.code), 'error');
+        kvShowToast('Failed to save tab order: ' + (resp.message || resp.code), 'error');
         // 回滚——重新拉
         kvLoadTabs();
     }

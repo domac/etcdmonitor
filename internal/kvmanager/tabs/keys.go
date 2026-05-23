@@ -134,8 +134,8 @@ func (m *FileKeyManager) generateAndSave() error {
 		return fmt.Errorf("close KEK file: %w", err)
 	}
 
-	logger.Infof("[KV-Tabs] Generated new KEK at %s (0600). 注意：此文件保护远程 Tab 凭据，"+
-		"请妥善备份；丢失后所有 Tab 密码必须重新输入", m.path)
+	logger.Infof("[KV-Tabs] Generated new KEK at %s (0600). NOTE: this file protects remote Tab "+
+		"credentials — back it up safely. If lost, every Tab password must be re-entered.", m.path)
 
 	return m.installKey(kek)
 }

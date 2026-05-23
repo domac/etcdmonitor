@@ -493,7 +493,7 @@
                     </div>
                 </div>
                 <!-- Add Cluster Tab Button (multi-cluster only) -->
-                <button class="kv-tab-add-btn" id="kvAddTabBtn" onclick="kvOpenAddTabDialog()" title="添加远程 etcd 集群" aria-label="Add Cluster">
+                <button class="kv-tab-add-btn" id="kvAddTabBtn" onclick="kvOpenAddTabDialog()" title="Add remote etcd cluster" aria-label="Add Cluster">
                     <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </button>
             </div>
@@ -545,36 +545,36 @@
 <div class="kv-modal-overlay" id="kvAddTabDialog" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kvAddTabTitle">
     <div class="kv-modal">
         <div class="kv-modal-header">
-            <span id="kvAddTabTitle">添加远程 etcd 集群</span>
+            <span id="kvAddTabTitle">Add remote etcd cluster</span>
             <button class="kv-modal-close" onclick="kvCloseAddTabDialog()" aria-label="Close">&times;</button>
         </div>
         <div class="kv-modal-body">
             <div class="kv-form-row">
                 <label for="kvAddTabEndpoint">Endpoint <span class="kv-required">*</span></label>
-                <input type="text" id="kvAddTabEndpoint" placeholder="http://10.0.0.1:2379  或  https://etcd.prod:2379"
+                <input type="text" id="kvAddTabEndpoint" placeholder="http://10.0.0.1:2379  or  https://etcd.prod:2379"
                        oninput="kvOnAddTabEndpointInput()" onblur="kvOnAddTabEndpointBlur()">
                 <div class="kv-form-hint" id="kvAddTabSchemeHint" style="display:none"></div>
                 <div class="kv-form-warn" id="kvAddTabHttpsWarn" style="display:none">
-                    ⚠️ HTTPS 连接将不校验服务端证书（InsecureSkipVerify=true）
+                    ⚠️ HTTPS connections do not verify the server certificate (InsecureSkipVerify=true)
                 </div>
             </div>
             <div class="kv-form-row">
-                <label for="kvAddTabName">显示名</label>
-                <input type="text" id="kvAddTabName" placeholder="默认使用 endpoint 的 host">
+                <label for="kvAddTabName">Display name</label>
+                <input type="text" id="kvAddTabName" placeholder="Defaults to the endpoint host">
             </div>
             <div class="kv-form-row">
-                <label for="kvAddTabUsername">用户名</label>
-                <input type="text" id="kvAddTabUsername" placeholder="可选——若 etcd 启用了 auth">
+                <label for="kvAddTabUsername">Username</label>
+                <input type="text" id="kvAddTabUsername" placeholder="Optional — only if the etcd cluster has auth enabled">
             </div>
             <div class="kv-form-row">
-                <label for="kvAddTabPassword">密码</label>
-                <input type="password" id="kvAddTabPassword" placeholder="可选；不在浏览器中明文存储——加密后落本地 DB" autocomplete="new-password">
+                <label for="kvAddTabPassword">Password</label>
+                <input type="password" id="kvAddTabPassword" placeholder="Optional; never stored in plain text — encrypted into the local DB" autocomplete="new-password">
             </div>
             <div class="kv-form-error" id="kvAddTabError" style="display:none"></div>
         </div>
         <div class="kv-modal-footer">
-            <button class="kv-btn kv-btn-secondary" onclick="kvCloseAddTabDialog()">取消</button>
-            <button class="kv-btn kv-btn-primary" id="kvAddTabSubmit" onclick="kvSubmitAddTab()">确定</button>
+            <button class="kv-btn kv-btn-secondary" onclick="kvCloseAddTabDialog()">Cancel</button>
+            <button class="kv-btn kv-btn-primary" id="kvAddTabSubmit" onclick="kvSubmitAddTab()">OK</button>
         </div>
     </div>
 </div>
@@ -583,19 +583,19 @@
 <div class="kv-modal-overlay" id="kvCloseConfirmDialog" style="display:none" role="dialog" aria-modal="true" aria-labelledby="kvCloseConfirmTitle">
     <div class="kv-modal kv-modal-sm">
         <div class="kv-modal-header">
-            <span id="kvCloseConfirmTitle">关闭 Tab？</span>
+            <span id="kvCloseConfirmTitle">Close tab?</span>
             <button class="kv-modal-close" onclick="kvCancelCloseTab()" aria-label="Close">&times;</button>
         </div>
         <div class="kv-modal-body">
-            <p id="kvCloseConfirmText">确定关闭此 Tab？此操作会从数据库删除该连接配置，下次登录将不再加载。</p>
+            <p id="kvCloseConfirmText">Close this tab? Its connection config will be removed from the database and won't load on next login.</p>
             <label class="kv-form-checkbox">
                 <input type="checkbox" id="kvCloseConfirmDontAsk">
-                <span>不再提示我（可以通过清除浏览器数据恢复）</span>
+                <span>Don't ask me again (clear browser data to restore)</span>
             </label>
         </div>
         <div class="kv-modal-footer">
-            <button class="kv-btn kv-btn-secondary" onclick="kvCancelCloseTab()">取消</button>
-            <button class="kv-btn kv-btn-danger" onclick="kvConfirmCloseTab()">确定关闭</button>
+            <button class="kv-btn kv-btn-secondary" onclick="kvCancelCloseTab()">Cancel</button>
+            <button class="kv-btn kv-btn-danger" onclick="kvConfirmCloseTab()">Close tab</button>
         </div>
     </div>
 </div>

@@ -305,7 +305,7 @@ func (h *TabHandler) handleCreate(c *gin.Context) {
 		c.JSON(http.StatusConflict, errorBody{
 			Error:   "per-user tab limit reached (10)",
 			Code:    "KV_TAB_LIMIT_EXCEEDED",
-			Message: "您已添加 10 个远程 Tab，达到上限",
+			Message: "You have reached the per-user limit of 10 remote tabs.",
 		})
 		return
 	}
@@ -351,8 +351,8 @@ func (h *TabHandler) handleCreate(c *gin.Context) {
 			Error:            "endpoint belongs to default cluster",
 			Code:             "KV_TAB_BELONGS_TO_DEFAULT",
 			MatchedMemberURL: matchedURL,
-			Message: fmt.Sprintf("您输入的地址 %s 实际是默认集群的成员（%s）。"+
-				"请直接使用左侧的「默认 Tab」浏览，无需重复添加。", endpoint, matchedURL),
+			Message: fmt.Sprintf("The endpoint %s is already a member of the default cluster (%s). "+
+				"Use the default tab on the left — no need to add it again.", endpoint, matchedURL),
 		})
 		return
 	}
