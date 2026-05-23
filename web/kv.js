@@ -1637,9 +1637,10 @@ async function kvActivateTab(tabID) {
 
     kvRenderTabBar();
 
-    // (3) 同步 UI 控件状态（V3/V2 toggle、Tree/List toggle、搜索框）
+    // (3) 同步 UI 控件状态（V3/V2 toggle、Tree/List toggle、搜索框、右侧编辑器面板）
     kvSyncToggleControls();
     kvSyncSearchInput();
+    kvSyncEditorPanel();
 
     // (4) 刷新 Info Bar（重新调 connect 拿版本/leader/dbsize）
     kvRefreshInfoBar();
@@ -1684,6 +1685,28 @@ function kvSyncSearchInput() {
     var clear = document.getElementById('kvSearchClear');
     if (input) input.value = kvState.searchKeyword || '';
     if (clear) clear.style.display = kvState.searchKeyword ? '' : 'none';
+}
+
+// 切 Tab 时把右侧编辑器面板（key 路径 / 元信息 / ACE 编辑器 / 工具栏）
+// 重新渲染为新 Tab 的 selectedNode；若新 Tab 没有选中节点，回到占位符状态。
+//
+// 没有这个函数时，切 Tab 只换了 kvState 里的值，DOM 仍是上一个 Tab 的内容。
+function kvSyncEditorPanel() {
+    var node = kvState.selectedNode;
+    if (!node) {
+        // 新 Tab 还没有任何选择 → 回到占位符
+        var info = document.getElementById('kvKeyInfo');
+        if (info) info.style.display = 'none';
+        kvHideEditor();
+        return;
+    }
+    kvShowKeyInfo(node);
+    // 与 kvSelectNode 行为一致：仅在节点确实有 value 时打开编辑器
+    if (node.value) {
+        kvShowEditor(node);
+    } else {
+        kvHideEditor();
+    }
 }
 
 function kvRefreshInfoBar() {
