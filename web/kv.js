@@ -23,6 +23,11 @@ var kvState = {
     searchKeyword: '',         // current search filter keyword
     _expandedSnapshot: null,   // snapshot of _expanded states before search
     _autoRefreshTimer: null,   // 60s auto-refresh timer ID
+    // === Auto-format toggle (kv-auto-format-toggle change) ===
+    autoFormatEnabled: false,        // 当前 Tab 的开关 ON/OFF
+    _autoFormatSettingMode: false,   // 防 onchange 递归 flag：程序设置 #kvModeSelect.value 时为 true
+    _rawValue: null,                 // 原始 value（_rawValue 已存在用于 Format 还原，此处显式列出）
+    _formatted: false,               // 兼容字段（旧 Format 逻辑使用，与 autoFormat 无关）
     // 各协议独立缓存树数据和选中状态
     cache: {
         v3: { treeData: null, selectedKey: null, selectedNode: null },
@@ -950,6 +955,12 @@ function kvShowEditor(node) {
         // Resize after display
         kvState.aceEditor.resize();
     }
+
+    // Auto-format toggle: 若开关 ON，重新识别+锁定+按需美化（方案 P：每次切 key 都重新识别，
+    // 不沿用前一个 key 的手动下拉选择）。开关 OFF 时保持现有行为。
+    if (kvState.autoFormatEnabled) {
+        kvApplyAutoFormat();
+    }
 }
 
 function kvHideEditor() {
@@ -985,6 +996,18 @@ function kvDetectMode(key, value) {
 }
 
 function kvChangeMode(mode) {
+    // 防 onchange 递归：程序内部调用 select.value=... 后会再次触发 onchange，
+    // 这里早返回避免 kvApplyAutoFormat → kvChangeMode → kvApplyAutoFormat 死循环。
+    if (kvState._autoFormatSettingMode) {
+        return;
+    }
+
+    // Auto-format ON 分支：用户手动切换下拉时按新格式重新美化 raw 值
+    if (kvState.autoFormatEnabled) {
+        kvHandleAutoFormatModeChange(mode);
+        return;
+    }
+
     if (kvState.aceEditor) {
         // If currently formatted, restore raw value before switching mode
         if (kvState._formatted && kvState._rawValue !== null) {
@@ -1002,6 +1025,8 @@ function kvChangeMode(mode) {
 // Switching mode or loading a new key restores the raw value.
 // Only clicking Save will persist the current editor content (formatted or not).
 function kvFormatJSON() {
+    // Auto-format ON 时按钮已 disabled，但防御性拦截键盘/外部触发
+    if (kvState.autoFormatEnabled) return;
     if (!kvState.aceEditor) return;
     if (kvState._formatted) return; // already formatted, don't re-format
 
@@ -1024,6 +1049,330 @@ function kvUpdateFormatBtn() {
     var mode = document.getElementById('kvModeSelect').value;
     var btn = document.getElementById('kvFormatBtn');
     btn.style.display = (mode === 'json') ? '' : 'none';
+    // Auto-format ON 时即使切回 JSON 也保持 disabled
+    if (kvState.autoFormatEnabled) {
+        btn.disabled = true;
+        btn.classList.add('kv-toolbar-btn-disabled');
+    }
+}
+
+// =============================================================
+// === Auto-format toggle (kv-auto-format-toggle change) =======
+// =============================================================
+// 设计要点（详见 openspec/changes/kv-auto-format-toggle/design.md）：
+//   - 开关 = 展示状态，永远不修改 _rawValue
+//   - ON：识别 → 切下拉 → 美化（仅 JSON/XML）→ 锁编辑 → 禁用 Save/Format
+//   - OFF：恢复 raw → 解锁 → 恢复按钮（不保留任何美化结果）
+//   - 状态以 KV Tab 维度持久化到 localStorage（per-device）
+//   - 切 key 时若仍 ON 则重新识别（方案 P，不保留手动选择）
+
+function kvAutoFormatStorageKey(tabID) {
+    return 'kv_auto_format_' + (tabID || 'default');
+}
+
+function kvAutoFormatLoad(tabID) {
+    var enabled = false;
+    try {
+        var v = localStorage.getItem(kvAutoFormatStorageKey(tabID));
+        enabled = (v === '1');
+    } catch (_) {
+        // localStorage 被禁用或处于隐私模式：静默回落到 OFF
+        enabled = false;
+    }
+    kvState.autoFormatEnabled = enabled;
+    var toggle = document.getElementById('kvAutoFormatToggle');
+    if (toggle) toggle.checked = enabled;
+}
+
+function kvAutoFormatSave(tabID, enabled) {
+    try {
+        localStorage.setItem(kvAutoFormatStorageKey(tabID), enabled ? '1' : '0');
+    } catch (_) {
+        // 静默忽略：用户禁用了 localStorage 也不影响本会话功能
+    }
+}
+
+// 仅依赖 value 内容启发识别（与原 kvDetectMode 解耦，后者依赖 key 后缀）
+// 返回 'json' | 'xml' | 'yaml' | 'toml' | 'ini' | 'text' 之一
+function kvDetectAutoFormat(value) {
+    if (typeof value !== 'string') return 'text';
+    var trimmed = value.trim();
+    if (!trimmed) return 'text';
+
+    // 1) XML：以 < 开头 + 以 > 结尾，且能被 prettifier 解析
+    if ((trimmed.charAt(0) === '<') && (trimmed.charAt(trimmed.length - 1) === '>')) {
+        try {
+            kvPrettyXML(trimmed);
+            return 'xml';
+        } catch (_) { /* fall through */ }
+    }
+
+    // 2) JSON：以 { 或 [ 开头 + 对应收口 + JSON.parse 通过
+    var first = trimmed.charAt(0);
+    var last = trimmed.charAt(trimmed.length - 1);
+    if ((first === '{' && last === '}') || (first === '[' && last === ']')) {
+        try {
+            JSON.parse(trimmed);
+            return 'json';
+        } catch (_) { /* fall through */ }
+    }
+
+    // 3) TOML：含 [[xxx]] 双括号节 / 或 key = "..." 引号字符串值 / 或 key = [...] 数组值
+    var hasArrayOfTables = /^\s*\[\[[^\]]+\]\]\s*$/m.test(trimmed);
+    var hasQuotedKV = /^\s*[A-Za-z_][\w.\-]*\s*=\s*"[^"]*"\s*$/m.test(trimmed);
+    var hasArrayKV = /^\s*[A-Za-z_][\w.\-]*\s*=\s*\[[^\]]*\]\s*$/m.test(trimmed);
+    if (hasArrayOfTables || hasQuotedKV || hasArrayKV) {
+        return 'toml';
+    }
+
+    // 4) INI：含 [section] 行，或至少一行 key = value（不带引号、未命中 TOML）
+    var hasSection = /^\s*\[[^\]\n]+\]\s*$/m.test(trimmed);
+    var hasPlainKV = /^\s*[A-Za-z_][\w.\-]*\s*=\s*\S+/m.test(trimmed);
+    if (hasSection || hasPlainKV) {
+        return 'ini';
+    }
+
+    // 5) YAML：≥2 行 key:<空格>... / 或单独成行 --- / 或含 - 列表项
+    var lines = trimmed.split(/\r?\n/);
+    var yamlKVCount = 0;
+    var hasDocSep = false;
+    var hasListItem = false;
+    for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i];
+        if (/^---\s*$/.test(ln)) hasDocSep = true;
+        if (/^\s*-\s+\S/.test(ln)) hasListItem = true;
+        if (/^\s*[A-Za-z_][\w\-]*\s*:\s/.test(ln)) yamlKVCount++;
+    }
+    if (yamlKVCount >= 2 || hasDocSep || hasListItem) {
+        return 'yaml';
+    }
+
+    // 6) 兜底
+    return 'text';
+}
+
+// 纯 JS XML 缩进 prettifier；失败 throw（由调用方接住）
+// 仅做"只读展示"的缩进，不做语义校验。处理：
+//   - 标签压到一行
+//   - 自闭合 <foo/> 保持
+//   - <!-- 注释 --> 保留为单行
+//   - <![CDATA[ ... ]]> 保留原样不缩进
+//   - <?xml ... ?> / <?... ?> 处理指令保留为单行
+function kvPrettyXML(raw) {
+    if (typeof raw !== 'string') throw new Error('kvPrettyXML: not a string');
+    var s = String(raw).trim();
+    if (!s) throw new Error('kvPrettyXML: empty');
+
+    // 提取 CDATA 与注释，用占位符替换避免影响后续标签拆分
+    var placeholders = [];
+    function stash(match) {
+        var key = ' XPH_' + placeholders.length + ' ';
+        placeholders.push(match);
+        return key;
+    }
+    s = s.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, stash);
+    s = s.replace(/<!--[\s\S]*?-->/g, stash);
+
+    // 在标签之间换行：> 后跟 < 时插入换行
+    s = s.replace(/>\s*</g, '>\n<');
+    // 标签内多余空白：仅在标签内部（不影响纯文本节点）
+    var lines = s.split('\n');
+    var out = [];
+    var depth = 0;
+    var indent = '  ';
+
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+
+        // 占位符整行：原样输出（CDATA / 注释）
+        if (/^ XPH_\d+ $/.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // 处理指令 <?xml ... ?> 或 <?xxx ?>：单行输出，不影响 depth
+        if (/^<\?[\s\S]*\?>$/.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // DOCTYPE
+        if (/^<!DOCTYPE\b/i.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // 自闭合 <foo .../>：缩进当前层，不变更 depth
+        if (/^<[^!?][^>]*\/>$/.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // 闭合标签 </foo>：先减 depth 再缩进
+        if (/^<\/[^>]+>$/.test(line)) {
+            depth = Math.max(0, depth - 1);
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // 开始标签 <foo>：先缩进，再 depth+1
+        if (/^<[^!?\/][^>]*[^\/]>$/.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            depth++;
+            continue;
+        }
+
+        // 同行 <foo>text</foo>：单行整体缩进
+        if (/^<[^!?\/][^>]*>[^<]*<\/[^>]+>$/.test(line)) {
+            out.push(repeat(indent, depth) + line);
+            continue;
+        }
+
+        // 其它（纯文本节点等）：维持当前缩进
+        out.push(repeat(indent, depth) + line);
+    }
+
+    var pretty = out.join('\n');
+    // 还原占位符
+    pretty = pretty.replace(/ XPH_(\d+) /g, function(_, idx) {
+        return placeholders[Number(idx)];
+    });
+
+    return pretty;
+
+    function repeat(s, n) {
+        var r = '';
+        for (var i = 0; i < n; i++) r += s;
+        return r;
+    }
+}
+
+// formatter 表：null = 仅识别+锁定+切语法高亮，不做内容变换
+var kvFormatters = {
+    json: function(raw) { return JSON.stringify(JSON.parse(raw), null, 2); },
+    xml:  function(raw) { return kvPrettyXML(raw); },
+    yaml: null,
+    toml: null,
+    ini: null,
+    text: null,
+    javascript: null,
+    lua: null
+};
+
+// 开关 onchange 入口
+function kvAutoFormatToggle(enabled) {
+    enabled = !!enabled;
+    kvState.autoFormatEnabled = enabled;
+
+    var tabID = kvCurrentTabID();
+    kvAutoFormatSave(tabID, enabled);
+
+    if (enabled) {
+        if (kvState.selectedNode && !kvState.selectedNode.dir) {
+            kvApplyAutoFormat();
+        } else {
+            // 没选 leaf 时只更新按钮状态（编辑器不显示，工具栏跟随隐藏）
+            kvUpdateAutoFormatUI(true);
+        }
+    } else {
+        kvAutoFormatRestore();
+    }
+}
+
+// 应用：识别 → 切下拉 → 美化（若有 formatter） → 锁编辑 → 禁按钮
+function kvApplyAutoFormat() {
+    if (!kvState.aceEditor) return;
+    if (!kvState.selectedNode || kvState.selectedNode.dir) return;
+
+    var raw = kvState._rawValue || '';
+    var detected = kvDetectAutoFormat(raw);
+
+    // 程序设置下拉值，标记防递归
+    var sel = document.getElementById('kvModeSelect');
+    if (sel) {
+        kvState._autoFormatSettingMode = true;
+        sel.value = detected;
+        kvState._autoFormatSettingMode = false;
+    }
+
+    // 切 ACE 语法高亮
+    kvState.aceEditor.session.setMode('ace/mode/' + detected);
+
+    // 应用 formatter（若有）
+    var formatter = kvFormatters[detected];
+    var content = raw;
+    if (typeof formatter === 'function') {
+        try {
+            content = formatter(raw);
+        } catch (_) {
+            // 识别成功但 formatter 失败：回退原值，不弹错（识别本就是启发，不做强保证）
+            content = raw;
+        }
+    }
+    kvState.aceEditor.setValue(content, -1);
+    kvState.aceEditor.clearSelection();
+    kvState.aceEditor.setReadOnly(true);
+
+    kvUpdateAutoFormatUI(true);
+}
+
+// 用户手动切下拉时的处理（开关 ON 期间）
+function kvHandleAutoFormatModeChange(mode) {
+    if (!kvState.aceEditor) return;
+    var raw = kvState._rawValue || '';
+    var formatter = kvFormatters[mode];
+
+    // 切 ACE 语法高亮（先切，无论是否成功美化）
+    kvState.aceEditor.session.setMode('ace/mode/' + mode);
+
+    if (typeof formatter === 'function') {
+        // 有 formatter：尝试美化；失败则 toast + 自动 OFF（恢复可编辑）
+        try {
+            var pretty = formatter(raw);
+            kvState.aceEditor.setValue(pretty, -1);
+            kvState.aceEditor.clearSelection();
+            kvState.aceEditor.setReadOnly(true);
+        } catch (_) {
+            kvShowToast('Auto-format: invalid ' + mode.toUpperCase() + ', switching off', 'error');
+            // 自动 OFF：把开关复位、改 localStorage、恢复编辑器
+            var toggle = document.getElementById('kvAutoFormatToggle');
+            if (toggle) toggle.checked = false;
+            kvState.autoFormatEnabled = false;
+            kvAutoFormatSave(kvCurrentTabID(), false);
+            kvAutoFormatRestore();
+        }
+    } else {
+        // 无 formatter：恢复 raw + 切高亮 + 保持 read-only
+        kvState.aceEditor.setValue(raw, -1);
+        kvState.aceEditor.clearSelection();
+        kvState.aceEditor.setReadOnly(true);
+    }
+}
+
+// 关闭：恢复 raw、解锁、恢复按钮
+function kvAutoFormatRestore() {
+    if (kvState.aceEditor) {
+        var raw = kvState._rawValue || '';
+        kvState.aceEditor.setValue(raw, -1);
+        kvState.aceEditor.clearSelection();
+        kvState.aceEditor.setReadOnly(false);
+    }
+    kvUpdateAutoFormatUI(false);
+}
+
+// 同步 Save / Format 按钮的 disabled 视觉
+function kvUpdateAutoFormatUI(on) {
+    var saveBtn = document.getElementById('kvSaveBtn');
+    var formatBtn = document.getElementById('kvFormatBtn');
+    if (saveBtn) {
+        saveBtn.disabled = on;
+        saveBtn.classList.toggle('kv-toolbar-btn-disabled', on);
+    }
+    if (formatBtn) {
+        formatBtn.disabled = on;
+        formatBtn.classList.toggle('kv-toolbar-btn-disabled', on);
+    }
 }
 
 // === Update ACE theme when system theme changes ===
@@ -1046,6 +1395,8 @@ if (_origToggleTheme) {
 
 // === CRUD: Save Value ===
 async function kvSaveValue() {
+    // Auto-format ON 时按钮已 disabled，但防御性拦截键盘/外部触发
+    if (kvState.autoFormatEnabled) return;
     if (!kvState.selectedNode) return;
     if (!kvState.aceEditor) return;
 
@@ -1640,7 +1991,14 @@ async function kvActivateTab(tabID) {
     // (3) 同步 UI 控件状态（V3/V2 toggle、Tree/List toggle、搜索框、右侧编辑器面板）
     kvSyncToggleControls();
     kvSyncSearchInput();
+    // Auto-format toggle 持久化按 Tab 隔离：先按新 Tab 的 localStorage 加载开关状态，
+    // 再由 kvSyncEditorPanel → kvShowEditor 按当前 autoFormatEnabled 渲染编辑器内容。
+    kvAutoFormatLoad(tabID);
     kvSyncEditorPanel();
+    // 若新 Tab 没有 leaf 选中，仍同步一次按钮 disabled 视觉（编辑器隐藏，但 UI 状态保持一致）
+    if (!kvState.selectedNode || kvState.selectedNode.dir) {
+        kvUpdateAutoFormatUI(kvState.autoFormatEnabled);
+    }
 
     // (4) 刷新 Info Bar（重新调 connect 拿版本/leader/dbsize）
     kvRefreshInfoBar();
@@ -2245,6 +2603,8 @@ async function kvInitMultiClusterTabs() {
         kvSession.tabOrder = ['default'];
     }
     await kvLoadTabs();
+    // 首屏恢复 Auto-format 开关（按当前活动 Tab 的 localStorage 值）
+    kvAutoFormatLoad(kvSession.activeTabID);
     kvStartStatusPolling();
     kvStartCacheTimer();
 }

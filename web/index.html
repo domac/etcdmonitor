@@ -520,6 +520,11 @@
             <div class="kv-editor-toolbar" id="kvEditorToolbar" style="display:none">
                 <button class="kv-toolbar-btn kv-save-btn" id="kvSaveBtn" onclick="kvSaveValue()" title="Save">Save</button>
                 <button class="kv-toolbar-btn" id="kvFormatBtn" onclick="kvFormatJSON()" title="Format JSON" style="display:none">Format</button>
+                <label class="kv-auto-format-switch" title="Auto-detect format and lock editor (read-only)">
+                    <input type="checkbox" id="kvAutoFormatToggle" onchange="kvAutoFormatToggle(this.checked)">
+                    <span class="kv-auto-format-slider" aria-hidden="true"></span>
+                    <span class="kv-auto-format-label">Auto-format</span>
+                </label>
                 <select class="kv-mode-select" id="kvModeSelect" onchange="kvChangeMode(this.value)">
                     <option value="text">Text</option>
                     <option value="json" selected>JSON</option>
