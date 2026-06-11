@@ -1,8 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -298,5 +302,116 @@ func TestEtcdFirstEndpoint(t *testing.T) {
 	got := cfg.EtcdFirstEndpoint()
 	if got != "http://10.0.1.1:2379" {
 		t.Errorf("EtcdFirstEndpoint() = %q, want %q", got, "http://10.0.1.1:2379")
+	}
+}
+
+// captureStderr 在测试期间临时接管 os.Stderr 并返回写入内容。
+// 用于验证 Load 在配置非法时打印的 WARN 消息。
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	var buf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&buf, r)
+	}()
+
+	fn()
+
+	// 必须先关闭写端，让 io.Copy 收到 EOF；再等待 goroutine 结束，buf 才可读。
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	wg.Wait()
+	os.Stderr = old
+	return buf.String()
+}
+
+// TestLoad_SessionTimeoutZero 验证 session_timeout: 0 被保留为 0（永不过期）。
+// 这是修复 fix-session-timeout-never-expire 的核心回归测试。
+func TestLoad_SessionTimeoutZero(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+
+	content := `
+server:
+  listen: ":9090"
+  session_timeout: 0
+`
+	if err := os.WriteFile(cfgFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := Load(cfgFile)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Server.SessionTimeout != 0 {
+		t.Errorf("Server.SessionTimeout = %d, want 0 (explicit zero must be preserved)",
+			cfg.Server.SessionTimeout)
+	}
+}
+
+// TestLoad_SessionTimeoutMissing 验证缺失字段时使用默认 3600。
+func TestLoad_SessionTimeoutMissing(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+
+	// server 段存在但不含 session_timeout
+	content := `
+server:
+  listen: ":9090"
+`
+	if err := os.WriteFile(cfgFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := Load(cfgFile)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Server.SessionTimeout != 3600 {
+		t.Errorf("Server.SessionTimeout = %d, want 3600 (missing key → default)",
+			cfg.Server.SessionTimeout)
+	}
+}
+
+// TestLoad_SessionTimeoutNegative 验证负值回退到 3600 并在 stderr 打印 WARN。
+func TestLoad_SessionTimeoutNegative(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+
+	content := `
+server:
+  listen: ":9090"
+  session_timeout: -1
+`
+	if err := os.WriteFile(cfgFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	var cfg *Config
+	stderr := captureStderr(t, func() {
+		c, err := Load(cfgFile)
+		if err != nil {
+			t.Fatalf("Load() error: %v", err)
+		}
+		cfg = c
+	})
+
+	if cfg.Server.SessionTimeout != 3600 {
+		t.Errorf("Server.SessionTimeout = %d, want 3600 (negative → fallback)",
+			cfg.Server.SessionTimeout)
+	}
+	if !strings.Contains(stderr, "WARN") || !strings.Contains(stderr, "session_timeout") {
+		t.Errorf("stderr should contain WARN about session_timeout, got %q", stderr)
 	}
 }

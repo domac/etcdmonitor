@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`server.session_timeout: 0` 现在按文档约定使会话永不过期**（修复早期被默认值覆盖的问题）。此前显式配置为 `0` 时，配置层会将其改写为 `3600`、登录处理层会再次兜底为 `1h`、Session 存储层也无"永不过期"语义；用户感知为约 1 小时后被踢回登录页。现在配置层、`MemorySessionStore`、`HandleLogin/HandleAuthStatus` 三层一致：
+  - YAML 中显式 `session_timeout: 0` 会被保留，登录后 `Session.ExpiresAt` 使用 `time.Time` 零值表示永不过期；
+  - 颁发 Cookie 的 `Max-Age` 设为约 10 年；
+  - `/api/auth/login` 与 `/api/auth/status` 返回 `expires_at: 0`；
+  - `MemorySessionStore.cleanup` 跳过零值 session；
+  - 负数 `session_timeout` 被视为非法，回退到 3600 并打印一次 stderr WARN。
+  详见 `openspec/changes/fix-session-timeout-never-expire/`。
+
 ## [0.8.1] - 2026-04-25
 
 ### Added

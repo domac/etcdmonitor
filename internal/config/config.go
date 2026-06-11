@@ -76,6 +76,17 @@ type Config struct {
 	} `yaml:"auth"`
 }
 
+// rawSessionTimeoutProbe 仅用于 Load 内部第二次解析，区分
+// `server.session_timeout` 在 YAML 中的三种情况：
+//   - 整段 server 缺失 / session_timeout 未列出   → SessionTimeout == nil
+//   - session_timeout: 0 / -1 / 1234              → SessionTimeout != nil，按值处理
+// 必须保留指针类型，才能识别"显式 0"与"未配置"。
+type rawSessionTimeoutProbe struct {
+	Server struct {
+		SessionTimeout *int `yaml:"session_timeout"`
+	} `yaml:"server"`
+}
+
 // Load 从文件加载配置并填充默认值
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -86,6 +97,28 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config file: %w", err)
+	}
+
+	// 第二次解析：仅探测 server.session_timeout 是否在 YAML 中显式出现，
+	// 用于区分「未配置」（→ 默认 3600）与「显式 0」（→ 永不过期，保留 0）。
+	// 这是必要的：Go 的 int 零值与"用户没写"无法直接区分。
+	probe := rawSessionTimeoutProbe{}
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return nil, fmt.Errorf("parse config file (probe): %w", err)
+	}
+	switch {
+	case probe.Server.SessionTimeout == nil:
+		// 未配置 → 默认 1 小时
+		cfg.Server.SessionTimeout = 3600
+	case *probe.Server.SessionTimeout < 0:
+		// 非法负数 → 回退默认并打印一次 WARN
+		fmt.Fprintf(os.Stderr,
+			"[Config] WARN: server.session_timeout=%d 非法，已回退为 3600\n",
+			*probe.Server.SessionTimeout)
+		cfg.Server.SessionTimeout = 3600
+	default:
+		// *probe == 0：永不过期，保留 0；*probe > 0：按值使用
+		cfg.Server.SessionTimeout = *probe.Server.SessionTimeout
 	}
 
 	// 默认值
@@ -115,9 +148,9 @@ func Load(path string) (*Config, error) {
 	if cfg.Server.TLSKey == "" {
 		cfg.Server.TLSKey = "certs/server.key"
 	}
-	if cfg.Server.SessionTimeout <= 0 {
-		cfg.Server.SessionTimeout = 3600
-	}
+	// 注意：cfg.Server.SessionTimeout 已在上方 rawConfig 阶段完成三态处理
+	//   nil → 3600；负数 → 3600+WARN；0 → 保留 0（永不过期）；正数 → 直接使用
+	// 这里不要再用 `<= 0 ⇒ 3600` 兜底，否则会把「永不过期」语义吞掉。
 	if cfg.Collector.Interval <= 0 {
 		cfg.Collector.Interval = 30
 	}

@@ -72,6 +72,15 @@ independently verifiable.
 - [ ] Emergency recovery procedure is documented: operators know to run
       `etcdmonitor reset-password --username admin` or `etcdmonitor unlock
       --username admin` from the service host.
+- [ ] `config.yaml` `server.session_timeout` matches your threat model.
+      Default `3600` (1 hour) is the safe baseline. Setting it to **`0` makes
+      the dashboard session never expire** — convenient for trusted
+      workstations on a LAN, but a deliberate security tradeoff:
+      a stolen browser cookie (or unattended workstation) keeps full
+      dashboard access until the operator explicitly hits **Logout**, the
+      service is restarted, or `etcdmonitor unlock` is used out-of-band.
+      Negative values are rejected and silently fall back to `3600`
+      with a WARN line on stderr at startup.
 
 ## 5. Logs & Audit
 

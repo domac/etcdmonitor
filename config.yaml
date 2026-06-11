@@ -40,7 +40,10 @@ server:
   # TLS 私钥文件路径（相对于程序所在目录）
   tls_key: "certs/server.key"
   # Dashboard 会话超时时间（秒），当 etcd 启用认证时 Dashboard 需要登录
-  # 默认 3600（1 小时），0 表示不过期
+  # 默认 3600（1 小时）
+  # 0 表示会话永不过期：登录后浏览器关闭再次访问也无需重新登录
+  #   （仅推荐受信工位/局域网，详见 docs/SECURITY_CHECKLIST.md）
+  # 负数为非法配置，将回退到 3600 并打印一次 WARN
   session_timeout: 3600
 
 collector:

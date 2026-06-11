@@ -165,3 +165,74 @@ func TestMemorySessionStoreCleanup(t *testing.T) {
 		t.Errorf("expected 1 session after cleanup, got %d", count)
 	}
 }
+
+// TestSession_NeverExpires 验证 ExpiresAt 零值的 session 永不过期
+func TestSession_NeverExpires(t *testing.T) {
+	s := &Session{ExpiresAt: time.Time{}}
+	if s.IsExpired() {
+		t.Error("session with zero ExpiresAt must never be expired")
+	}
+}
+
+// TestMemorySessionStore_NeverExpires 验证 Create(*, *, 0) 创建永不过期 session
+func TestMemorySessionStore_NeverExpires(t *testing.T) {
+	store := NewMemorySessionStore()
+	defer store.Stop()
+
+	session, err := store.Create(1, "alice", 0)
+	if err != nil {
+		t.Fatalf("Create with timeout=0 should succeed: %v", err)
+	}
+	if !session.ExpiresAt.IsZero() {
+		t.Errorf("ExpiresAt should be zero for never-expire session, got %v", session.ExpiresAt)
+	}
+	if session.IsExpired() {
+		t.Error("never-expire session must not be expired immediately")
+	}
+	got := store.Get(session.Token)
+	if got == nil {
+		t.Fatal("Get should return never-expire session")
+	}
+	if !got.ExpiresAt.IsZero() {
+		t.Error("Get must preserve zero ExpiresAt")
+	}
+}
+
+// TestMemorySessionStore_NegativeTimeout 验证负 timeout 被拒绝
+func TestMemorySessionStore_NegativeTimeout(t *testing.T) {
+	store := NewMemorySessionStore()
+	defer store.Stop()
+
+	_, err := store.Create(1, "bob", -1*time.Second)
+	if err == nil {
+		t.Fatal("Create with negative timeout must return error")
+	}
+	if err != ErrInvalidSessionTimeout {
+		t.Errorf("expected ErrInvalidSessionTimeout, got %v", err)
+	}
+}
+
+// TestMemorySessionStore_Cleanup_SkipsNeverExpire 验证 cleanup 不清理永不过期 session
+func TestMemorySessionStore_Cleanup_SkipsNeverExpire(t *testing.T) {
+	store := NewMemorySessionStore()
+	defer store.Stop()
+
+	never, _ := store.Create(1, "never", 0)
+	expired, _ := store.Create(2, "expired", 1*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+
+	store.cleanup()
+
+	if store.Get(never.Token) == nil {
+		t.Error("never-expire session must survive cleanup")
+	}
+	if store.Get(expired.Token) != nil {
+		t.Error("expired session must be removed by cleanup")
+	}
+	store.mu.RLock()
+	count := len(store.sessions)
+	store.mu.RUnlock()
+	if count != 1 {
+		t.Errorf("expected 1 session left, got %d", count)
+	}
+}

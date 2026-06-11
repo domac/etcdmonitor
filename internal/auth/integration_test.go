@@ -358,3 +358,163 @@ func TestIT_StartupLog_NoPlainPassword(t *testing.T) {
 	}
 	// 该 password 是随机生成的，不会作为硬编码字符串出现在源码中
 }
+
+// newITSetupWithSessionTimeout 与 newITSetup 等价，但允许定制 SessionTimeout。
+// 用于覆盖 fix-session-timeout-never-expire 的端到端 login 行为。
+func newITSetupWithSessionTimeout(t *testing.T, sessionTimeoutSec int) (*AuthHandler, *storage.Storage, string, *gin.Engine) {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	cfg := &config.Config{}
+	cfg.Storage.DBPath = dbPath
+	cfg.Server.SessionTimeout = sessionTimeoutSec
+	cfg.Auth.BcryptCost = 4
+	cfg.Auth.LockoutThreshold = 5
+	cfg.Auth.LockoutDurationSeconds = 2
+	cfg.Auth.MinPasswordLength = 8
+
+	s, err := storage.New(cfg)
+	if err != nil {
+		t.Fatalf("storage.New: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := EnsureDefaultAdmin(s, cfg.Auth.BcryptCost, dir); err != nil {
+		t.Fatalf("EnsureDefaultAdmin: %v", err)
+	}
+
+	sess := NewMemorySessionStore()
+	t.Cleanup(func() { sess.Stop() })
+
+	h := NewAuthHandler(cfg, s, sess, nil, true, "test")
+
+	router := gin.New()
+	router.POST("/api/auth/login", h.HandleLogin)
+	router.POST("/api/auth/change-password", h.HandleChangePassword)
+	router.GET("/api/auth/status", h.HandleAuthStatus)
+
+	return h, s, dir, router
+}
+
+// TestIT_Login_SessionTimeoutZero_NeverExpires 验证 session_timeout=0 下的端到端登录行为：
+//   - 响应 JSON expires_at == 0
+//   - Set-Cookie Max-Age >= 10 年
+//   - 后续 /api/auth/status 仍返回 authenticated=true 且 expires_at=0
+func TestIT_Login_SessionTimeoutZero_NeverExpires(t *testing.T) {
+	_, _, dir, router := newITSetupWithSessionTimeout(t, 0)
+	initPwd := readInitialPassword(t, dir)
+
+	// 先把初始密码改掉，才能正常登录拿到 session
+	w := postJSON(router, "/api/auth/change-password", map[string]string{
+		"username":     "admin",
+		"old_password": initPwd,
+		"new_password": "NewStrongPass!9",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("change-password code = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	// 用新密码登录
+	w = postJSON(router, "/api/auth/login", map[string]string{
+		"username": "admin",
+		"password": "NewStrongPass!9",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login code = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+
+	// (a) expires_at == 0
+	exp, ok := resp["expires_at"].(float64)
+	if !ok {
+		t.Fatalf("expires_at not a number, got %T (%v)", resp["expires_at"], resp["expires_at"])
+	}
+	if exp != 0 {
+		t.Errorf("expected expires_at=0 for session_timeout=0, got %v", exp)
+	}
+
+	// (b) Set-Cookie Max-Age >= 10 年
+	const tenYears = 10 * 365 * 24 * 3600
+	var sessionCookie *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "etcdmonitor_session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("expected etcdmonitor_session cookie")
+	}
+	if sessionCookie.MaxAge < tenYears {
+		t.Errorf("expected MaxAge >= %d (10 years), got %d", tenYears, sessionCookie.MaxAge)
+	}
+
+	// (c) 携带 cookie 访问 /api/auth/status，应返回 authenticated=true & expires_at=0
+	req := httptest.NewRequest("GET", "/api/auth/status", nil)
+	req.AddCookie(sessionCookie)
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status code = %d", w2.Code)
+	}
+	var statusResp map[string]interface{}
+	_ = json.Unmarshal(w2.Body.Bytes(), &statusResp)
+	if statusResp["authenticated"] != true {
+		t.Errorf("expected authenticated=true on status, got %v", statusResp["authenticated"])
+	}
+	expStatus, _ := statusResp["expires_at"].(float64)
+	if expStatus != 0 {
+		t.Errorf("expected status expires_at=0, got %v", expStatus)
+	}
+}
+
+// TestIT_Login_SessionTimeoutPositive_HasExpires 验证正常 session_timeout 仍按原行为返回 unix 时间戳。
+func TestIT_Login_SessionTimeoutPositive_HasExpires(t *testing.T) {
+	_, _, dir, router := newITSetupWithSessionTimeout(t, 3600)
+	initPwd := readInitialPassword(t, dir)
+
+	w := postJSON(router, "/api/auth/change-password", map[string]string{
+		"username":     "admin",
+		"old_password": initPwd,
+		"new_password": "NewStrongPass!9",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("change-password code = %d", w.Code)
+	}
+
+	w = postJSON(router, "/api/auth/login", map[string]string{
+		"username": "admin",
+		"password": "NewStrongPass!9",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("login code = %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+	exp, _ := resp["expires_at"].(float64)
+	if exp <= float64(time.Now().Unix()) {
+		t.Errorf("expected expires_at to be in the future, got %v (now=%d)",
+			exp, time.Now().Unix())
+	}
+
+	// Cookie 应有 Expires 而非 MaxAge=10y
+	var sessionCookie *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "etcdmonitor_session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("expected etcdmonitor_session cookie")
+	}
+	if sessionCookie.Expires.IsZero() {
+		t.Error("expected cookie Expires set for normal session")
+	}
+}

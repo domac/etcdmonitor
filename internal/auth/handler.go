@@ -196,8 +196,14 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	_ = h.store.ResetLoginState(req.Username)
 	_ = h.store.UpdateLastLogin(req.Username)
 
+	// SessionTimeout 三态：
+	//   == 0  → 永不过期（time.Duration(0) 透传给 Create）
+	//   > 0   → 普通过期 session
+	//   < 0   → 防御性兜底：理论上 config.Load 已保证 >= 0；万一被绕过则使用 1h 默认并告警
 	timeout := time.Duration(h.cfg.Server.SessionTimeout) * time.Second
-	if timeout <= 0 {
+	if h.cfg.Server.SessionTimeout < 0 {
+		logger.Warnf("[Auth] cfg.Server.SessionTimeout=%d < 0, fallback to 1h",
+			h.cfg.Server.SessionTimeout)
 		timeout = 1 * time.Hour
 	}
 	session, err := h.sessionStore.Create(user.ID, req.Username, timeout)
@@ -209,26 +215,44 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	http.SetCookie(c.Writer, &http.Cookie{
+	// Cookie 设置：永不过期 session 使用 MaxAge 大值（约 10 年），
+	// 普通 session 使用 Expires = session.ExpiresAt。
+	cookie := &http.Cookie{
 		Name:     "etcdmonitor_session",
 		Value:    session.Token,
 		Path:     "/",
-		Expires:  session.ExpiresAt,
 		HttpOnly: true,
 		Secure:   h.cfg.Server.TLSEnable,
 		SameSite: http.SameSiteLaxMode,
-	})
+	}
+	if session.ExpiresAt.IsZero() {
+		// 10 年（秒）：跨浏览器重启仍然保留登录态
+		cookie.MaxAge = 10 * 365 * 24 * 3600
+	} else {
+		cookie.Expires = session.ExpiresAt
+	}
+	http.SetCookie(c.Writer, cookie)
 
 	elapsed := time.Since(start).Milliseconds()
-	logger.Infof("[Auth] User %s logged in successfully", req.Username)
+	if session.ExpiresAt.IsZero() {
+		logger.Infof("[Auth] User %s logged in with non-expiring session", req.Username)
+	} else {
+		logger.Infof("[Auth] User %s logged in successfully", req.Username)
+	}
 	h.logAudit(req.Username, "login", clientIP, "ok", elapsed, true)
 
+	// expires_at: 永不过期 session 返回 0；普通 session 返回 unix 秒
+	var expiresAtUnix int64
+	if !session.ExpiresAt.IsZero() {
+		expiresAtUnix = session.ExpiresAt.Unix()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"username":              session.Username,
-		"expires_at":            session.ExpiresAt.Unix(),
-		"session_token":         session.Token,
-		"must_change_password":  false,
-		"authenticated":         true,
+		"username":             session.Username,
+		"expires_at":           expiresAtUnix,
+		"session_token":        session.Token,
+		"must_change_password": false,
+		"authenticated":        true,
 	})
 }
 
@@ -378,11 +402,17 @@ func (h *AuthHandler) HandleAuthStatus(c *gin.Context) {
 		return
 	}
 
+	// expires_at: 永不过期 session 返回 0；普通 session 返回 unix 秒
+	var expiresAtUnix int64
+	if !session.ExpiresAt.IsZero() {
+		expiresAtUnix = session.ExpiresAt.Unix()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"auth_required":           true,
 		"authenticated":           true,
 		"username":                session.Username,
-		"expires_at":              session.ExpiresAt.Unix(),
+		"expires_at":              expiresAtUnix,
 		"initial_setup_pending":   initialSetupPending,
 		"app_version":             h.version,
 		"ops_enabled":             h.cfg.OpsEnabled(),

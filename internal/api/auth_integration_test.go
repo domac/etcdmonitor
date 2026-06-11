@@ -262,3 +262,103 @@ func TestSessionExpiry_MiddlewareRejects(t *testing.T) {
 		t.Errorf("expected 401 for expired session, got %d", w.Code)
 	}
 }
+
+// TestAuthStatus_NeverExpireSession_ReturnsZero 验证 ExpiresAt 零值的 session
+// 在 /api/auth/status 响应中 expires_at 字段返回 0。
+//
+// 对应规范 local-user-auth → 「认证状态接口语义 / 已登录状态（永不过期 session）」
+func TestAuthStatus_NeverExpireSession_ReturnsZero(t *testing.T) {
+	a, store := newTestAPI(true)
+
+	// 模拟 session_timeout=0 下登录创建的 session
+	session, err := store.Create(1, "alice", 0)
+	if err != nil {
+		t.Fatalf("Create with timeout=0 failed: %v", err)
+	}
+	if !session.ExpiresAt.IsZero() {
+		t.Fatalf("expected zero ExpiresAt for never-expire session, got %v", session.ExpiresAt)
+	}
+
+	router := gin.New()
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
+
+	req := httptest.NewRequest("GET", "/api/auth/status", nil)
+	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if resp["authenticated"] != true {
+		t.Errorf("expected authenticated=true, got %v", resp["authenticated"])
+	}
+	exp, ok := resp["expires_at"].(float64) // JSON 数字解码为 float64
+	if !ok {
+		t.Fatalf("expires_at not a number, got %T (%v)", resp["expires_at"], resp["expires_at"])
+	}
+	if exp != 0 {
+		t.Errorf("expected expires_at=0 for never-expire session, got %v", exp)
+	}
+}
+
+// TestAuthStatus_NormalSession_HasExpiresAt 验证普通过期 session 在 /api/auth/status
+// 响应中 expires_at 仍然返回正常的 unix 时间戳，保证既有行为没被破坏。
+func TestAuthStatus_NormalSession_HasExpiresAt(t *testing.T) {
+	a, store := newTestAPI(true)
+
+	session, _ := store.Create(1, "bob", 1*time.Hour)
+	if session.ExpiresAt.IsZero() {
+		t.Fatalf("normal session must not have zero ExpiresAt")
+	}
+
+	router := gin.New()
+	router.GET("/api/auth/status", a.authHandler.HandleAuthStatus)
+
+	req := httptest.NewRequest("GET", "/api/auth/status", nil)
+	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	exp, ok := resp["expires_at"].(float64)
+	if !ok {
+		t.Fatalf("expires_at not a number, got %T", resp["expires_at"])
+	}
+	if int64(exp) <= time.Now().Unix() {
+		t.Errorf("expected expires_at to be in the future, got %v", exp)
+	}
+	if int64(exp) != session.ExpiresAt.Unix() {
+		t.Errorf("expires_at = %v, want %d", exp, session.ExpiresAt.Unix())
+	}
+}
+
+// TestAuthMiddleware_NeverExpireSession_StillValid 验证永不过期 session
+// 通过 authMiddleware：即便 ExpiresAt.IsZero()，IsValid 仍返回 true，受保护接口可访问。
+func TestAuthMiddleware_NeverExpireSession_StillValid(t *testing.T) {
+	a, store := newTestAPI(true)
+
+	session, _ := store.Create(1, "alice", 0)
+
+	router := gin.New()
+	router.GET("/api/test", a.authMiddleware(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.AddCookie(&http.Cookie{Name: "etcdmonitor_session", Value: session.Token})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("never-expire session should pass middleware, got %d", w.Code)
+	}
+}
