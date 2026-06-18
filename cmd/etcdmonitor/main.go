@@ -29,7 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Version 版本号，构建时通过 -ldflags 注入
+// Version 版本号信息，构建时通过 -ldflags 注入
 var Version = "dev"
 
 const helpText = `etcdmonitor - etcd Monitoring Dashboard

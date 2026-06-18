@@ -33,7 +33,6 @@ certs/*.pem
 certs/*.p12
 certs/*.pfx
 !certs/.gitkeep
-/etcdmonitor
 *.db
 *.log
 
